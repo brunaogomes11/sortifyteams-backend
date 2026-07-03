@@ -1,19 +1,26 @@
 package com.gomesdev.sortifyteams.config;
 
+import com.gomesdev.sortifyteams.domain.usuario.UsuarioService;
+import com.gomesdev.sortifyteams.security.JwtAuthFilter;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.AuthenticationProvider;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 /**
  * Duas cadeias de autenticação independentes (plan.md, D1):
- * - /api/**   → stateless, JWT via JJWT (filtro adicionado na Fase 1, junto
- *               com o domínio de usuário), consumida pelo app mobile.
+ * - /api/**   → stateless, JWT via JJWT (JwtAuthFilter), consumida pelo app.
  * - /admin/** → sessão JDBC + form login, painel Thymeleaf de uso interno.
  * Qualquer rota fora das duas cadeias cai na cadeia catch-all (nega tudo,
  * exceto Swagger e /error).
@@ -22,6 +29,18 @@ import org.springframework.security.web.SecurityFilterChain;
 @EnableWebSecurity
 @EnableMethodSecurity
 public class SecurityConfig {
+
+    private final JwtAuthFilter jwtAuthFilter;
+    private final UsuarioService usuarioService;
+    private final PasswordEncoder passwordEncoder;
+
+    public SecurityConfig(JwtAuthFilter jwtAuthFilter,
+                          UsuarioService usuarioService,
+                          PasswordEncoder passwordEncoder) {
+        this.jwtAuthFilter = jwtAuthFilter;
+        this.usuarioService = usuarioService;
+        this.passwordEncoder = passwordEncoder;
+    }
 
     @Bean
     @Order(1)
@@ -36,8 +55,9 @@ public class SecurityConfig {
                         .anyRequest().authenticated())
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint((request, response, authException) ->
-                                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized")));
-        // Fase 1: .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+                                response.sendError(HttpServletResponse.SC_UNAUTHORIZED, "Unauthorized")))
+                .authenticationProvider(authenticationProvider())
+                .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
 
@@ -58,6 +78,18 @@ public class SecurityConfig {
                         .logoutUrl("/admin/logout")
                         .logoutSuccessUrl("/admin/login?logout"));
         return http.build();
+    }
+
+    @Bean
+    public AuthenticationProvider authenticationProvider() {
+        DaoAuthenticationProvider provider = new DaoAuthenticationProvider(usuarioService);
+        provider.setPasswordEncoder(passwordEncoder);
+        return provider;
+    }
+
+    @Bean
+    public AuthenticationManager authenticationManager(AuthenticationConfiguration config) throws Exception {
+        return config.getAuthenticationManager();
     }
 
     /** Fora de /api e /admin só existem Swagger e /error neste backend. */

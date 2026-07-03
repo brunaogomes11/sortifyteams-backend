@@ -1,5 +1,6 @@
 package com.gomesdev.sortifyteams.security;
 
+import com.gomesdev.sortifyteams.domain.usuario.Usuario;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -10,6 +11,7 @@ import org.springframework.stereotype.Service;
 import javax.crypto.SecretKey;
 import java.util.Base64;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Function;
 
@@ -24,6 +26,15 @@ public class JwtService {
             @Value("${jwt.expiration-ms}") long expirationMs) {
         this.signingKey = Keys.hmacShaKeyFor(Base64.getDecoder().decode(secret));
         this.expirationMs = expirationMs;
+    }
+
+    public String generateToken(UserDetails userDetails) {
+        Usuario usuario = (Usuario) userDetails;
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("id", usuario.getId());
+        claims.put("nome", usuario.getNomeCompleto());
+        claims.put("role", usuario.getRole().name());
+        return generateToken(claims, userDetails);
     }
 
     public String generateToken(Map<String, Object> extraClaims, UserDetails userDetails) {

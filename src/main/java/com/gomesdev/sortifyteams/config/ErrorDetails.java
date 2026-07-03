@@ -52,6 +52,12 @@ public class ErrorDetails {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorResponse(errors));
     }
 
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ErrorResponse> tratarErro400(IllegalArgumentException ex) {
+        var msg = ex.getMessage() != null ? ex.getMessage() : "Operação inválida.";
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorResponse(List.of(msg)));
+    }
+
     @ExceptionHandler(ConstraintViolationException.class)
     public ResponseEntity<ErrorResponse> handleConstraintViolationException(ConstraintViolationException ex) {
         List<String> errors = new ArrayList<>();
