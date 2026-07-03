@@ -9,10 +9,12 @@
 - Spring Boot **4.1.0** (Spring Framework 7 / Spring Security 7), Java **25**.
 - Já no pom: `data-jpa`, `security`, `session-jdbc`, `webmvc`, `postgresql`,
   devtools e os starters de teste correspondentes.
-- Faltam (adicionar em tasks): `thymeleaf`, `validation`,
-  `oauth2-resource-server` (JWT), `flyway-core` + `flyway-database-postgresql`,
-  `testcontainers` (testes). Conexão JDBC via `.env` (D7), sem dependência
-  extra.
+- **Diretriz do usuário: a tecnologia do backend espelha exatamente o
+  photographer-manager (framelio-backend)**: JJWT 0.12.6, SpringDoc/Swagger,
+  ULID (ulid-creator), `ddl-auto=update` + `data.sql` (sem Flyway), conexão
+  JDBC via `.env`. Adicionados também `thymeleaf` (painel admin) e
+  `validation`; Testcontainers fica restrito aos testes (infra de teste, não
+  muda a tecnologia de produção).
 - Sem git init ainda — inicializar no primeiro incremento.
 
 **Mobile** — `F:\PROJETOS_DEV\React Native\sortify-teams`
@@ -52,13 +54,11 @@ CSRF habilitado. Regra extra: login de `/api/auth/login` recusa token para
 DONO_QUADRA com status ≠ APROVADO (FR-003).
 
 ### D2 — Biblioteca JWT
-| Alternativa | Prós | Contras |
-|---|---|---|
-| **A. `spring-boot-starter-oauth2-resource-server` (Nimbus embutido)** ✅ | Suporte de 1ª classe no Security 7 (`JwtEncoder`/`JwtDecoder`, chave HMAC ou RSA própria); sem lib extra; validação, expiração e `@AuthenticationPrincipal Jwt` prontos | Nome sugere OAuth, mas funciona com JWT próprio sem authorization server |
-| B. jjwt | API simples e conhecida | Filtro manual, integração artesanal com o Security |
-| C. java-jwt (Auth0) | Simples | Mesmo problema da B |
-
-**Decisão**: A — menos código de segurança artesanal (Princípio I).
+**Decisão (ajustada pelo usuário)**: **JJWT 0.12.6**, espelhando o
+photographer-manager: `security/JwtService` (segredo Base64 via
+`jwt.secret`, HMAC-SHA256, expiração via `jwt.expiration-ms`) +
+`security/JwtAuthFilter` (`OncePerRequestFilter`, adicionado antes do
+`UsernamePasswordAuthenticationFilter` na cadeia `/api/**`).
 
 ### D3 — Refresh token
 | Alternativa | Prós | Contras |
@@ -115,8 +115,11 @@ spring.datasource.password=${DB_PASSWORD:postgres}
   constraint única e o lock da reserva (FR-009) se comportam igual.
 - **Testcontainers** nos testes de integração (sobe Postgres efêmero, não
   depende do `.env`).
-- Migrações com **Flyway** (`V1__...sql` em diante) — nada de
-  `ddl-auto=update` fora de dev local.
+- **Schema gerenciado pelo Hibernate** (`ddl-auto=update`), como no
+  photographer-manager — sem Flyway. Seed dos esportes via `data.sql`
+  idempotente (`ON CONFLICT DO NOTHING`), com
+  `defer-datasource-initialization=true`. Tabelas do Spring Session criadas
+  pelo próprio Spring Session (`initialize-schema=always`).
 
 ### D8 — Mobile: base técnica das features novas
 | Tema | Alternativas | Decisão |
@@ -128,7 +131,12 @@ spring.datasource.password=${DB_PASSWORD:postgres}
 | Deep link (C9) | **expo-linking + universal links** ✅ | `racha://convite/<token>` + fallback web; nativo do Expo |
 | Navegação | Manter React Navigation 6 ✅ (upgrade junto do SDK) | Já usada no app; tabs por papel (Jogador vs Dono) em navigators separados |
 
-## Modelo de Dados (PostgreSQL / Flyway)
+## Modelo de Dados (PostgreSQL, schema via Hibernate)
+
+Seguindo o padrão do photographer-manager: IDs **ULID** (String de 26 chars,
+gerado em `@PrePersist` com `UlidCreator`), tabelas `tb_*`, colunas em
+português, relações por coluna de ID (sem associações JPA), anotações
+`@Schema` do Swagger nas entidades.
 
 ```
 usuario           (id, nome_completo, username UQ, email UQ, senha_hash,
@@ -158,10 +166,11 @@ notificacao       (id, usuario_id FK, tipo, titulo, corpo, payload_json,
 ```
 
 Pontos de atenção:
-- **FR-009**: a `UNIQUE (quadra_horario_id, data)` só vale para reservas
-  ativas → usar índice único parcial `WHERE status = 'CONFIRMADA'` (recurso do
-  Postgres — reforça a D7). Confirmação de reserva em transação
-  `SERIALIZABLE`-equivalente via constraint + tratamento de
+- **FR-009**: `UNIQUE (quadra_horario_id, data)` em `tb_reserva_horario`
+  (gerada pelo Hibernate via `@UniqueConstraint`). Como não há Flyway para
+  criar índice parcial, o cancelamento **remove** as linhas de
+  `tb_reserva_horario` (liberando os slots) e preserva o histórico em
+  `tb_reserva` (status). Confirmação em transação + tratamento de
   `DataIntegrityViolationException` → HTTP 409 com horários alternativos.
 - **Esporte preferido (C11)**: calculado por query (moda de esporte nos rachas
   CONCLUÍDOS do usuário), com override manual na coluna do usuário.
@@ -211,12 +220,18 @@ Painel admin (`/admin/**`, Thymeleaf + sessão): `/admin/login`,
 
 ## Arquitetura do Backend
 
-Pacotes por domínio (`com.gomesdev.sortifyteams`): `auth`, `usuario`,
-`esporte`, `racha` (inclui `sorteio` como serviço puro e testável), `quadra`,
-`reserva`, `notificacao`, `admin`, `config` (security, storage), `common`
-(erros, paginação). Camadas: controller → service → repository; DTOs de
-request/response por contexto (Princípio III); erros padronizados
-(ProblemDetail).
+Estrutura espelhada do photographer-manager (`com.gomesdev.sortifyteams`):
+- `config/` — SecurityConfig (duas chains), PasswordConfig, ErrorDetails
+  (RestControllerAdvice com `ErrorResponse {timestamp, message[]}`),
+  `config/storage/` (StorageService, LocalStorageService).
+- `security/` — JwtService (JJWT) e JwtAuthFilter.
+- `domain/<feature>/` — Entity, Controller, Repository, Service +
+  subpacotes `request/` e `response/`: `usuario`, `auth` (com `refresh/`),
+  `esporte`, `racha` (inclui `sorteio` como serviço puro e testável),
+  `quadra`, `reserva`, `notificacao`.
+- `admin/` — controllers MVC do painel Thymeleaf.
+Camadas: controller → service → repository; DTOs de request/response por
+contexto (Princípio III).
 
 O **algoritmo de sorteio** vive em classe pura sem dependência de
 Spring/banco (`SorteioService.sortear(List<Jogador>, config)`) — testável por
@@ -237,10 +252,11 @@ unidade com seed de aleatoriedade injetável.
 
 ## Fases de Entrega (entrada do /tasks)
 
-- **Fase 0 — Fundações**: git init nos dois repos; backend: deps que faltam,
-  `.env` + `.env.example` (D7), Flyway V1 (schema) + V2 (seed esportes),
-  config das duas security chains; mobile: upgrade Expo SDK, axios+Query,
-  estrutura de pastas.
+- **Fase 0 — Fundações**: git init nos dois repos; backend: deps espelhando o
+  photographer-manager (JJWT, SpringDoc, ULID), `.env` + `.env.example` (D7),
+  config das duas security chains, ErrorDetails, JwtService; mobile: upgrade
+  Expo SDK, axios+Query, estrutura de pastas. Seed dos esportes entra na
+  Fase 2 junto com a entidade Esporte (`data.sql`).
 - **Fase 1 — Auth**: registro/login/refresh/logout, papéis e status, telas de
   cadastro/login/aguardando aprovação.
 - **Fase 2 — Racha + Sorteio** (núcleo): criar racha, jogadores (avulso +

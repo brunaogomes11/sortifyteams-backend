@@ -12,17 +12,20 @@ Tarefas de regra crítica incluem os testes na própria tarefa (Constituição I
 
 - [ ] **T001** (BE) `git init` + `.gitignore` (target/, `.env`, uploads/) +
   commit inicial do scaffold.
-- [ ] **T002** (BE) Adicionar deps ao `pom.xml`: `spring-boot-starter-thymeleaf`,
-  `spring-boot-starter-validation`, `spring-boot-starter-oauth2-resource-server`,
-  `flyway-core`, `flyway-database-postgresql`, Testcontainers (postgres + junit).
+- [ ] **T002** (BE) Adicionar deps ao `pom.xml` espelhando o
+  photographer-manager: JJWT 0.12.6 (api/impl/jackson), SpringDoc 3.0.3,
+  ulid-creator, `spring-boot-starter-thymeleaf`,
+  `spring-boot-starter-validation`, Testcontainers (só em testes).
 - [ ] **T003** (BE) `application.properties` com
   `spring.config.import=optional:file:.env[.properties]` e datasource via
   `${DB_HOST}/${DB_PORT}/${DB_NAME}/${DB_USERNAME}/${DB_PASSWORD}` (D7);
   criar `.env` local e `.env.example` versionado (DB_*, `JWT_SECRET`,
   `STORAGE_PATH`, `APP_DEEP_LINK_BASE`).
-- [ ] **T004** (BE) Flyway `V1__schema.sql` (todas as tabelas do plano,
-  incluindo índice único parcial de `reserva_horario`) e
-  `V2__seed_esportes.sql` (10 esportes com exige_goleiro e mínimos).
+- [ ] **T004** (BE) Padrão de persistência do photographer-manager:
+  `ddl-auto=update` (schema pelo Hibernate), `data.sql` idempotente para
+  seeds, Spring Session com `initialize-schema=always`, `security/JwtService`
+  (JJWT) e `config/ErrorDetails`. (Seed dos esportes entra na T014, junto com
+  a entidade.)
 - [ ] **T005** (BE) `config/`: duas `SecurityFilterChain` (D1) — `/api/**`
   stateless (JWT, tudo negado exceto `/api/auth/**`) e `/admin/**` (form
   login, sessão JDBC, CSRF). Teste MockMvc do isolamento das cadeias.
@@ -54,7 +57,8 @@ Tarefas de regra crítica incluem os testes na própria tarefa (Constituição I
 ## Fase 2 — Racha + Sorteio (Fluxo 3, núcleo)
 
 - [ ] **T014** (BE) Entidades/repos `esporte`, `racha`, `participante_racha`,
-  `time`; `GET /api/esportes`.
+  `time_racha` (IDs ULID, tabelas `tb_*`); seed dos 10 esportes via `data.sql`
+  (`ON CONFLICT DO NOTHING`); `GET /api/esportes`.
 - [ ] **T015** (BE) `POST /api/rachas`, `GET /api/rachas` (paginado),
   `GET /api/rachas/{id}`; participantes: adicionar (avulso ou `usuario_id`),
   remover; `GET /api/usuarios/busca?q=` retornando o mínimo (FR-016/C3).
@@ -106,9 +110,11 @@ Tarefas de regra crítica incluem os testes na própria tarefa (Constituição I
   (grade − reservas confirmadas).
 - [ ] **T030** (BE) **Reserva com testes na mesma task** (FR-008/009):
   `POST /api/reservas` calcula `preco_total` (testes unitários: 1 e N
-  horários), transação + violação do índice único parcial → HTTP 409 com
-  horários alternativos. Teste de integração Testcontainers com 2 requisições
-  concorrentes (1 sucesso, 1 conflito — C8).
+  horários), transação + violação da `UNIQUE (quadra_horario_id, data)` →
+  HTTP 409 com horários alternativos; cancelamento remove os slots de
+  `tb_reserva_horario` (libera o horário, histórico fica em `tb_reserva`).
+  Teste de integração Testcontainers com 2 requisições concorrentes
+  (1 sucesso, 1 conflito — C8).
 - [ ] **T031** (APP) Telas: Lista de Quadras (filtros, FlashList), Detalhe
   (fotos, contato), Data/Horário (múltipla seleção, preço por horário e
   total), confirmação + tratamento do 409 com alternativas.
