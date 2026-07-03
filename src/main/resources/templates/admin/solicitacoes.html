@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Racha Admin — Solicitações</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-[#0C0F0A] text-[#EEF2E4]">
+    <header class="border-b border-[#2C3421] bg-[#12160F]">
+        <div class="mx-auto flex max-w-4xl items-center justify-between px-6 py-4">
+            <h1 class="text-xl font-extrabold uppercase tracking-tight text-[#FBFDF4]">Racha <span class="text-[#C7FA3C]">Admin</span></h1>
+            <form th:action="@{/admin/logout}" method="post">
+                <button type="submit" class="text-sm text-[#A9B39A] hover:text-[#FF5B5B] transition">Sair</button>
+            </form>
+        </div>
+    </header>
+
+    <main class="mx-auto max-w-4xl px-6 py-8">
+        <h2 class="text-2xl font-bold text-[#FBFDF4]">Solicitações de Dono de Quadra</h2>
+        <p class="mt-1 mb-6 text-sm text-[#A9B39A]">Cadastros aguardando aprovação (Fluxo 7).</p>
+
+        <div th:if="${mensagem}" class="mb-4 rounded-lg border border-[#12A46B] bg-[#34E29B]/10 px-4 py-3 text-sm text-[#34E29B]"
+             th:text="${mensagem}"></div>
+
+        <div th:if="${#lists.isEmpty(solicitacoes)}"
+             class="rounded-xl border border-[#2C3421] bg-[#191E15] px-6 py-10 text-center text-[#7E886F]">
+            Nenhuma solicitação pendente. 🎉
+        </div>
+
+        <ul class="space-y-3">
+            <li th:each="dono : ${solicitacoes}"
+                class="flex items-center justify-between gap-4 rounded-xl border border-[#2C3421] bg-[#191E15] px-5 py-4">
+                <div>
+                    <p class="font-semibold text-[#FBFDF4]" th:text="${dono.nomeCompleto}">Nome</p>
+                    <p class="text-sm text-[#A9B39A]">
+                        <span th:text="'@' + ${dono.username}">@usuario</span> ·
+                        <span th:text="${dono.email}">email</span> ·
+                        <span th:text="${#temporals.format(dono.criadoEm, 'dd/MM/yyyy HH:mm')}">data</span>
+                    </p>
+                </div>
+                <div class="flex gap-2">
+                    <form th:action="@{/admin/solicitacoes/{id}/aprovar(id=${dono.id})}" method="post">
+                        <button type="submit"
+                                class="rounded-lg bg-[#C7FA3C] px-4 py-2 text-sm font-bold text-[#0C1400] hover:bg-[#AEE81C] transition">
+                            Aprovar
+                        </button>
+                    </form>
+                    <form th:action="@{/admin/solicitacoes/{id}/rejeitar(id=${dono.id})}" method="post">
+                        <button type="submit"
+                                class="rounded-lg border border-[#D62F2F] px-4 py-2 text-sm font-bold text-[#FF5B5B] hover:bg-[#FF5B5B]/10 transition">
+                            Rejeitar
+                        </button>
+                    </form>
+                </div>
+            </li>
+        </ul>
+    </main>
+</body>
+</html>

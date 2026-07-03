@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Racha Admin — Login</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-[#0C0F0A] text-[#EEF2E4] flex items-center justify-center p-6">
+    <div class="w-full max-w-sm">
+        <h1 class="text-3xl font-extrabold uppercase tracking-tight text-[#FBFDF4]">Racha <span class="text-[#C7FA3C]">Admin</span></h1>
+        <p class="mt-1 mb-8 text-sm text-[#A9B39A]">Painel interno de administração.</p>
+
+        <div th:if="${param.error}" class="mb-4 rounded-lg border border-[#D62F2F] bg-[#FF5B5B]/10 px-4 py-3 text-sm text-[#FF5B5B]">
+            Usuário ou senha inválidos.
+        </div>
+        <div th:if="${param.logout}" class="mb-4 rounded-lg border border-[#12A46B] bg-[#34E29B]/10 px-4 py-3 text-sm text-[#34E29B]">
+            Sessão encerrada.
+        </div>
+
+        <form th:action="@{/admin/login}" method="post" class="space-y-4">
+            <div>
+                <label for="username" class="block text-sm font-semibold text-[#A9B39A] mb-1">Usuário</label>
+                <input id="username" name="username" type="text" required autofocus
+                       class="w-full rounded-lg border border-[#2C3421] bg-[#12160F] px-4 py-2.5 text-[#EEF2E4] focus:border-[#C7FA3C] focus:outline-none">
+            </div>
+            <div>
+                <label for="password" class="block text-sm font-semibold text-[#A9B39A] mb-1">Senha</label>
+                <input id="password" name="password" type="password" required
+                       class="w-full rounded-lg border border-[#2C3421] bg-[#12160F] px-4 py-2.5 text-[#EEF2E4] focus:border-[#C7FA3C] focus:outline-none">
+            </div>
+            <button type="submit"
+                    class="w-full rounded-lg bg-[#C7FA3C] py-2.5 font-bold text-[#0C1400] hover:bg-[#AEE81C] transition">
+                Entrar
+            </button>
+        </form>
+    </div>
+</body>
+</html>

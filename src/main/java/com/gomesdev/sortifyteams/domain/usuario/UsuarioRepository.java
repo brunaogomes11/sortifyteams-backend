@@ -1,11 +1,15 @@
 package com.gomesdev.sortifyteams.domain.usuario;
 
+import com.gomesdev.sortifyteams.enums.RoleEnum;
+import com.gomesdev.sortifyteams.enums.StatusUsuarioEnum;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
 import java.util.Optional;
 
 public interface UsuarioRepository extends JpaRepository<Usuario, String> {
+
+    List<Usuario> findByRoleAndStatusOrderByCriadoEmAsc(RoleEnum role, StatusUsuarioEnum status);
 
     Optional<Usuario> findByUsername(String username);
 

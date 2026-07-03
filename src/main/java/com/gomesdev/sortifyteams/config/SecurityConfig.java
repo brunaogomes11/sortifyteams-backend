@@ -76,7 +76,8 @@ public class SecurityConfig {
                         .permitAll())
                 .logout(logout -> logout
                         .logoutUrl("/admin/logout")
-                        .logoutSuccessUrl("/admin/login?logout"));
+                        .logoutSuccessUrl("/admin/login?logout"))
+                .authenticationProvider(authenticationProvider());
         return http.build();
     }
 
