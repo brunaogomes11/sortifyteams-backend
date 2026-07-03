@@ -93,13 +93,14 @@ public class SecurityConfig {
         return config.getAuthenticationManager();
     }
 
-    /** Fora de /api e /admin só existem Swagger e /error neste backend. */
+    /** Fora de /api e /admin só existem Swagger, arquivos públicos e /error. */
     @Bean
     @Order(3)
     public SecurityFilterChain catchAllChain(HttpSecurity http) throws Exception {
         http
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
+                        .requestMatchers("/files/**").permitAll()
                         .requestMatchers("/error").permitAll()
                         .anyRequest().denyAll());
         return http.build();
