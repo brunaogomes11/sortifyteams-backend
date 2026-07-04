@@ -105,17 +105,17 @@ Tarefas de regra crítica incluem os testes na própria tarefa (Constituição I
 
 ## Fase 5 — Reserva de Quadra (Fluxo 4)
 
-- [ ] **T029** (BE) `GET /api/quadras` (filtros + paginação),
+- [x] **T029** (BE) `GET /api/quadras` (filtros + paginação),
   `GET /api/quadras/{id}`, `GET /api/quadras/{id}/disponibilidade?data=`
   (grade − reservas confirmadas).
-- [ ] **T030** (BE) **Reserva com testes na mesma task** (FR-008/009):
+- [x] **T030** (BE) **Reserva com testes na mesma task** (FR-008/009):
   `POST /api/reservas` calcula `preco_total` (testes unitários: 1 e N
   horários), transação + violação da `UNIQUE (quadra_horario_id, data)` →
   HTTP 409 com horários alternativos; cancelamento remove os slots de
   `tb_reserva_horario` (libera o horário, histórico fica em `tb_reserva`).
   Teste de integração Testcontainers com 2 requisições concorrentes
   (1 sucesso, 1 conflito — C8).
-- [ ] **T031** (APP) Telas: Lista de Quadras (filtros, FlashList), Detalhe
+- [x] **T031** (APP) Telas: Lista de Quadras (filtros, FlashList), Detalhe
   (fotos, contato), Data/Horário (múltipla seleção, preço por horário e
   total), confirmação + tratamento do 409 com alternativas.
 
