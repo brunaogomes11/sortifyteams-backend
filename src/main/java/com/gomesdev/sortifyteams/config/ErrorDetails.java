@@ -52,6 +52,12 @@ public class ErrorDetails {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(new ErrorResponse(errors));
     }
 
+    @ExceptionHandler(com.gomesdev.sortifyteams.domain.reserva.ConflitoHorarioException.class)
+    public ResponseEntity<ErrorResponse> tratarConflitoHorario(
+            com.gomesdev.sortifyteams.domain.reserva.ConflitoHorarioException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ErrorResponse(List.of(ex.getMessage())));
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ErrorResponse> tratarErro400(IllegalArgumentException ex) {
         var msg = ex.getMessage() != null ? ex.getMessage() : "Operação inválida.";
