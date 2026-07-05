@@ -10,9 +10,13 @@
     <header class="border-b border-[#2C3421] bg-[#12160F]">
         <div class="mx-auto flex max-w-4xl items-center justify-between px-6 py-4">
             <h1 class="text-xl font-extrabold uppercase tracking-tight text-[#FBFDF4]">Racha <span class="text-[#C7FA3C]">Admin</span></h1>
-            <form th:action="@{/admin/logout}" method="post">
-                <button type="submit" class="text-sm text-[#A9B39A] hover:text-[#FF5B5B] transition">Sair</button>
-            </form>
+            <nav class="flex items-center gap-4 text-sm">
+                <a th:href="@{/admin/solicitacoes}" class="text-[#C7FA3C] font-semibold">Solicitações</a>
+                <a th:href="@{/admin/dashboard}" class="text-[#A9B39A] hover:text-[#C7FA3C] transition">Dashboard</a>
+                <form th:action="@{/admin/logout}" method="post">
+                    <button type="submit" class="text-[#A9B39A] hover:text-[#FF5B5B] transition">Sair</button>
+                </form>
+            </nav>
         </div>
     </header>
 

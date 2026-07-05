@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Racha Admin — Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-[#0C0F0A] text-[#EEF2E4]">
+    <header class="border-b border-[#2C3421] bg-[#12160F]">
+        <div class="mx-auto flex max-w-4xl items-center justify-between px-6 py-4">
+            <h1 class="text-xl font-extrabold uppercase tracking-tight text-[#FBFDF4]">Racha <span class="text-[#C7FA3C]">Admin</span></h1>
+            <nav class="flex items-center gap-4 text-sm">
+                <a th:href="@{/admin/solicitacoes}" class="text-[#A9B39A] hover:text-[#C7FA3C] transition">Solicitações</a>
+                <a th:href="@{/admin/dashboard}" class="text-[#C7FA3C] font-semibold">Dashboard</a>
+                <form th:action="@{/admin/logout}" method="post">
+                    <button type="submit" class="text-[#A9B39A] hover:text-[#FF5B5B] transition">Sair</button>
+                </form>
+            </nav>
+        </div>
+    </header>
+
+    <main class="mx-auto max-w-4xl px-6 py-8">
+        <h2 class="text-2xl font-bold text-[#FBFDF4]">Dashboard</h2>
+        <p class="mt-1 mb-6 text-sm text-[#A9B39A]">Rachas concluídos por quadra (C14).</p>
+
+        <div th:if="${#lists.isEmpty(itens)}"
+             class="rounded-xl border border-[#2C3421] bg-[#191E15] px-6 py-10 text-center text-[#7E886F]">
+            Nenhum racha concluído em quadras ainda.
+        </div>
+
+        <ul class="space-y-3" th:unless="${#lists.isEmpty(itens)}">
+            <li th:each="item : ${itens}"
+                class="flex items-center justify-between gap-4 rounded-xl border border-[#2C3421] bg-[#191E15] px-5 py-4">
+                <div>
+                    <p class="font-semibold text-[#FBFDF4]" th:text="${item.quadraNome}">Quadra</p>
+                    <p class="text-sm text-[#A9B39A]" th:text="${item.quadraEndereco}">Endereço</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-2xl font-extrabold text-[#C7FA3C]" th:text="${item.totalRachas}">0</p>
+                    <p class="text-xs uppercase tracking-wide text-[#7E886F]">rachas concluídos</p>
+                </div>
+            </li>
+        </ul>
+    </main>
+</body>
+</html>

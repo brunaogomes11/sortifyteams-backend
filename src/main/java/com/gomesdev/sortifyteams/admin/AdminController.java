@@ -30,6 +30,12 @@ public class AdminController {
         return "admin/solicitacoes";
     }
 
+    @GetMapping("/dashboard")
+    public String dashboard(Model model) {
+        model.addAttribute("itens", adminService.dashboard());
+        return "admin/dashboard";
+    }
+
     @PostMapping("/solicitacoes/{id}/aprovar")
     public String aprovar(@PathVariable String id, RedirectAttributes redirect) {
         adminService.aprovar(id);
