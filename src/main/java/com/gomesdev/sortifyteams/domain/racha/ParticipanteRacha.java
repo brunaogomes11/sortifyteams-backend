@@ -52,6 +52,14 @@ public class ParticipanteRacha {
         this.eGoleiro = Boolean.TRUE.equals(request.eGoleiro());
     }
 
+    /** Entrada de usuário cadastrado via link de convite (C9). */
+    public ParticipanteRacha(String rachaId, String usuarioId, int nivelTecnico, boolean eGoleiro) {
+        this.rachaId = rachaId;
+        this.usuarioId = usuarioId;
+        this.nivelTecnico = nivelTecnico;
+        this.eGoleiro = eGoleiro;
+    }
+
     @PrePersist
     public void prePersist() {
         if (this.id == null) {

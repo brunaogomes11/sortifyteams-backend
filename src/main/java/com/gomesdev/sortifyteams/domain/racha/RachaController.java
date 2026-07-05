@@ -69,6 +69,14 @@ public class RachaController {
         return ResponseEntity.status(HttpStatus.CREATED).body(service.adicionarParticipante(id, request, usuario));
     }
 
+    @DeleteMapping("/{id}/participantes/me")
+    @Operation(summary = "Sai do racha (participante — Fluxo 5)")
+    public ResponseEntity<Void> sair(@PathVariable String id,
+                                     @AuthenticationPrincipal Usuario usuario) {
+        service.sairDoRacha(id, usuario);
+        return ResponseEntity.noContent().build();
+    }
+
     @DeleteMapping("/{id}/participantes/{participanteId}")
     @Operation(summary = "Remove um jogador do racha")
     public ResponseEntity<RachaResponse> removerParticipante(@PathVariable String id,

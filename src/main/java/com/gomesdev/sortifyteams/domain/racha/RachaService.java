@@ -4,12 +4,15 @@ import com.gomesdev.sortifyteams.domain.esporte.Esporte;
 import com.gomesdev.sortifyteams.domain.esporte.EsporteService;
 import com.gomesdev.sortifyteams.domain.esporte.response.EsporteResponse;
 import com.gomesdev.sortifyteams.domain.racha.request.ConcluirRachaRequest;
+import com.gomesdev.sortifyteams.domain.racha.request.EntrarConviteRequest;
 import com.gomesdev.sortifyteams.domain.racha.request.ParticipanteRequest;
 import com.gomesdev.sortifyteams.domain.racha.request.RachaRequest;
+import com.gomesdev.sortifyteams.domain.racha.response.ConviteResponse;
 import com.gomesdev.sortifyteams.domain.racha.response.ParticipanteResponse;
 import com.gomesdev.sortifyteams.domain.racha.response.RachaResponse;
 import com.gomesdev.sortifyteams.domain.racha.response.RachaResumoResponse;
 import com.gomesdev.sortifyteams.domain.racha.response.TimeResponse;
+import com.gomesdev.sortifyteams.domain.reserva.ReservaService;
 import com.gomesdev.sortifyteams.domain.racha.sorteio.SorteioService;
 import com.gomesdev.sortifyteams.domain.usuario.Usuario;
 import com.gomesdev.sortifyteams.domain.usuario.UsuarioRepository;
@@ -35,19 +38,22 @@ public class RachaService {
     private final EsporteService esporteService;
     private final UsuarioRepository usuarioRepository;
     private final SorteioService sorteioService;
+    private final ReservaService reservaService;
 
     public RachaService(RachaRepository rachaRepository,
                         ParticipanteRachaRepository participanteRepository,
                         TimeRachaRepository timeRepository,
                         EsporteService esporteService,
                         UsuarioRepository usuarioRepository,
-                        SorteioService sorteioService) {
+                        SorteioService sorteioService,
+                        ReservaService reservaService) {
         this.rachaRepository = rachaRepository;
         this.participanteRepository = participanteRepository;
         this.timeRepository = timeRepository;
         this.esporteService = esporteService;
         this.usuarioRepository = usuarioRepository;
         this.sorteioService = sorteioService;
+        this.reservaService = reservaService;
     }
 
     @Transactional
@@ -167,7 +173,7 @@ public class RachaService {
         return montarResponse(racha);
     }
 
-    /** Cancela o racha. (Cascata de reserva e notificações entram na Fase 6 — C10.) */
+    /** Cancela o racha e, em cascata, a reserva confirmada — notificando o dono (C10). */
     @Transactional
     public void cancelar(String rachaId, Usuario usuario) {
         Racha racha = buscarEntidade(rachaId);
@@ -176,6 +182,59 @@ public class RachaService {
 
         racha.setStatus(StatusRachaEnum.CANCELADO);
         rachaRepository.save(racha);
+        reservaService.cancelarPorCancelamentoDoRacha(rachaId);
+    }
+
+    // ---------- convite (C9) ----------
+
+    @Transactional(readOnly = true)
+    public ConviteResponse detalharConvite(String token, Usuario usuario) {
+        Racha racha = buscarPorToken(token);
+        var esporte = esporteService.buscarEntidade(racha.getEsporteId());
+        Usuario organizador = usuarioRepository.findById(racha.getOrganizadorId()).orElseThrow();
+        long qtd = participanteRepository.countByRachaId(racha.getId());
+        boolean jaParticipa = racha.getOrganizadorId().equals(usuario.getId())
+                || participanteRepository.existsByRachaIdAndUsuarioId(racha.getId(), usuario.getId());
+        // FR-016: só o primeiro nome do organizador
+        String primeiroNome = organizador.getNomeCompleto().split(" ")[0];
+        return new ConviteResponse(racha.getId(), esporte.getNome(), esporte.getIcone(),
+                esporte.isExigeGoleiro(), primeiroNome, racha.getData(), racha.getHorario(),
+                qtd, racha.getLimiteVagas(), racha.getStatus(), jaParticipa);
+    }
+
+    @Transactional
+    public RachaResponse entrarPorConvite(String token, EntrarConviteRequest request, Usuario usuario) {
+        Racha racha = buscarPorToken(token);
+        garantirAberto(racha);
+        if (racha.getOrganizadorId().equals(usuario.getId())
+                || participanteRepository.existsByRachaIdAndUsuarioId(racha.getId(), usuario.getId())) {
+            throw new IllegalArgumentException("Você já está neste racha.");
+        }
+        if (racha.getLimiteVagas() != null
+                && participanteRepository.countByRachaId(racha.getId()) >= racha.getLimiteVagas()) {
+            throw new IllegalArgumentException("O racha já atingiu o limite de vagas.");
+        }
+        participanteRepository.save(new ParticipanteRacha(racha.getId(), usuario.getId(),
+                request.nivelTecnico(), Boolean.TRUE.equals(request.eGoleiro())));
+        return montarResponse(racha);
+    }
+
+    /** Participante sai do racha (Fluxo 5). O organizador cancela em vez de sair. */
+    @Transactional
+    public void sairDoRacha(String rachaId, Usuario usuario) {
+        Racha racha = buscarEntidade(rachaId);
+        if (racha.getOrganizadorId().equals(usuario.getId())) {
+            throw new IllegalArgumentException("O organizador não sai do racha — cancele-o.");
+        }
+        ParticipanteRacha participante = participanteRepository
+                .findByRachaIdAndUsuarioId(rachaId, usuario.getId())
+                .orElseThrow(() -> new EntityNotFoundException("Você não participa deste racha."));
+        participanteRepository.delete(participante);
+    }
+
+    private Racha buscarPorToken(String token) {
+        return rachaRepository.findByTokenConvite(token)
+                .orElseThrow(() -> new EntityNotFoundException("Convite inválido."));
     }
 
     // ---------- privados ----------
