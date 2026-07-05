@@ -121,30 +121,30 @@ Tarefas de regra crítica incluem os testes na própria tarefa (Constituição I
 
 ## Fase 6 — Gestão do Racha (Fluxo 5)
 
-- [ ] **T032** (BE) Convite (C9): `token_convite`, `GET /api/convites/{token}`
+- [x] **T032** (BE) Convite (C9): `token_convite`, `GET /api/convites/{token}`
   (dados mínimos — FR-016), `POST /api/convites/{token}/entrar` respeitando
   `limite_vagas`; sair do racha. Testes de limite e reentrada.
-- [ ] **T033** (BE) Cancelamentos C10 com testes: `DELETE /api/rachas/{id}`
+- [x] **T033** (BE) Cancelamentos C10 com testes: `DELETE /api/rachas/{id}`
   cancela reserva + notifica dono; `DELETE /api/dono/reservas/{id}` notifica
   organizador e participantes cadastrados.
-- [ ] **T034** (BE) `GET /api/dono/agenda?de=&ate=` (data, horário, quem
+- [x] **T034** (BE) `GET /api/dono/agenda?de=&ate=` (data, horário, quem
   reservou — mínimo necessário, status).
-- [ ] **T035** (APP) Tela Gerenciar Racha (visões organizador × participante),
+- [x] **T035** (APP) Tela Gerenciar Racha (visões organizador × participante),
   Compartilhar (share sheet com deep link `racha://convite/<token>` via
   expo-linking + rota de entrada), cancelar/sair com confirmação.
-- [ ] **T036** [P] (APP) Tela Agenda do Dono com cancelamento de reserva.
+- [x] **T036** [P] (APP) Tela Agenda do Dono com cancelamento de reserva.
 
 ## Fase 7 — Perfil, Dashboard e Lembretes
 
-- [ ] **T037** (BE) Perfil (FR-012): `GET/PUT /api/perfil`, foto, contador de
+- [x] **T037** (BE) Perfil (FR-012): `GET/PUT /api/perfil`, foto, contador de
   rachas CONCLUÍDOS, esporte preferido = moda do histórico com override manual
   (C11) + testes do cálculo.
-- [ ] **T038** (APP) Tela Perfil (foto, contadores, esporte preferido com
+- [x] **T038** (APP) Tela Perfil (foto, contadores, esporte preferido com
   edição) + central de notificações (badge, lista, marcar lida).
-- [ ] **T039** (BE) Dashboard admin (C14): view SQL de rachas concluídos por
+- [x] **T039** (BE) Dashboard admin (C14): view SQL de rachas concluídos por
   quadra + página `/admin/dashboard`, estrutura pronta para expandir por
   horário.
-- [ ] **T040** [P] (BE) Lembrete de racha via `@Scheduled` (notificação in-app
+- [x] **T040** [P] (BE) Lembrete de racha via `@Scheduled` (notificação in-app
   + push no dia do jogo).
 
 ## Fase 8 — Endurecimento
