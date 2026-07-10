@@ -93,14 +93,19 @@ public class SecurityConfig {
         return config.getAuthenticationManager();
     }
 
-    /** Fora de /api e /admin só existem Swagger, arquivos públicos e /error. */
+    /** Fora de /api e /admin só existem a landing pública (/ e /landing/**),
+     *  Swagger, arquivos públicos, a landing de convite (/convite/**) e /error. */
     @Bean
     @Order(3)
     public SecurityFilterChain catchAllChain(HttpSecurity http) throws Exception {
         http
                 .authorizeHttpRequests(auth -> auth
+                        .requestMatchers("/", "/index.html", "/landing/**").permitAll()
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                         .requestMatchers("/files/**").permitAll()
+                        .requestMatchers("/convite/**").permitAll()
+                        // Handshake do WebSocket ao vivo; a auth real é o JWT no frame CONNECT.
+                        .requestMatchers("/ws/**").permitAll()
                         .requestMatchers("/error").permitAll()
                         .anyRequest().denyAll());
         return http.build();

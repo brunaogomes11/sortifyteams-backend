@@ -14,6 +14,7 @@ public record RachaResumoResponse(
         @Schema(description = "Slug do ícone do esporte") String esporteIcone,
         @Schema(description = "Data do jogo") LocalDate data,
         @Schema(description = "Horário do jogo") LocalTime horario,
+        @Schema(description = "Local do jogo (texto livre)") String local,
         @Schema(description = "Status") StatusRachaEnum status,
         @Schema(description = "Total de participantes") long qtdParticipantes,
         @Schema(description = "Se o usuário logado é o organizador") boolean organizador
@@ -21,6 +22,6 @@ public record RachaResumoResponse(
     public RachaResumoResponse(Racha racha, String esporteNome, String esporteIcone,
                                long qtdParticipantes, boolean organizador) {
         this(racha.getId(), esporteNome, esporteIcone, racha.getData(), racha.getHorario(),
-                racha.getStatus(), qtdParticipantes, organizador);
+                racha.getLocal(), racha.getStatus(), qtdParticipantes, organizador);
     }
 }

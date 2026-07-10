@@ -1,19 +1,25 @@
 package com.gomesdev.sortifyteams.config;
 
+import com.fasterxml.jackson.databind.exc.InvalidFormatException;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.validation.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @RestControllerAdvice
 public class ErrorDetails {
@@ -32,14 +38,73 @@ public class ErrorDetails {
 
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ErrorResponse> tratarErro403(AccessDeniedException ex) {
-        var msg = ex.getMessage() != null ? ex.getMessage() : "Acesso negado.";
+        // O default do Spring Security vem em inglês ("Access Denied").
+        var msg = ex.getMessage() == null || "Access Denied".equals(ex.getMessage())
+                ? "Acesso negado."
+                : ex.getMessage();
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(new ErrorResponse(List.of(msg)));
+    }
+
+    @ExceptionHandler(BadCredentialsException.class)
+    public ResponseEntity<ErrorResponse> tratarCredenciaisInvalidas(BadCredentialsException ex) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(new ErrorResponse(List.of("Usuário ou senha incorretos.")));
     }
 
     @ExceptionHandler(AuthenticationException.class)
     public ResponseEntity<ErrorResponse> tratarErro401(AuthenticationException ex) {
         var msg = ex.getMessage() != null ? ex.getMessage() : "Não autenticado.";
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ErrorResponse(List.of(msg)));
+    }
+
+    /**
+     * Corpo que o Jackson não conseguiu ler (data "25/12/2026", horário "25:00",
+     * enum minúsculo...) é erro do cliente — sem isto cairia no handler genérico
+     * como 500 "Erro interno inesperado".
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> tratarCorpoIlegivel(HttpMessageNotReadableException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(new ErrorResponse(List.of(mensagemDeFormato(ex))));
+    }
+
+    private String mensagemDeFormato(HttpMessageNotReadableException ex) {
+        // Spring Boot 4 converte HTTP com Jackson 3 (tools.jackson); o Jackson 2
+        // (com.fasterxml) segue no classpath para outros usos — trata os dois.
+        for (Throwable causa = ex.getCause(); causa != null; causa = causa.getCause()) {
+            if (causa instanceof tools.jackson.databind.exc.InvalidFormatException formato) {
+                String campo = formato.getPath().stream()
+                        .map(ref -> ref.getPropertyName())
+                        .filter(nome -> nome != null)
+                        .collect(Collectors.joining("."));
+                return dicaDeFormato(campo, formato.getTargetType());
+            }
+            if (causa instanceof InvalidFormatException formato) {
+                String campo = formato.getPath().stream()
+                        .map(ref -> ref.getFieldName())
+                        .filter(nome -> nome != null)
+                        .collect(Collectors.joining("."));
+                return dicaDeFormato(campo, formato.getTargetType());
+            }
+        }
+        return "Corpo da requisição inválido ou mal formatado.";
+    }
+
+    private String dicaDeFormato(String campo, Class<?> alvo) {
+        String prefixo = campo == null || campo.isEmpty() ? "" : campo + ": ";
+        if (alvo == LocalDate.class) {
+            return prefixo + "data em formato inválido — use AAAA-MM-DD (ex.: 2026-12-25).";
+        }
+        if (alvo == LocalTime.class) {
+            return prefixo + "horário em formato inválido — use HH:MM (ex.: 19:00).";
+        }
+        if (alvo != null && alvo.isEnum()) {
+            String aceitos = java.util.Arrays.stream(alvo.getEnumConstants())
+                    .map(Object::toString)
+                    .collect(Collectors.joining(", "));
+            return prefixo + "valor inválido — valores aceitos: " + aceitos + ".";
+        }
+        return prefixo + "valor em formato inválido.";
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

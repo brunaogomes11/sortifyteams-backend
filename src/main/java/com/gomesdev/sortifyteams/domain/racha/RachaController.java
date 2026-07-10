@@ -2,7 +2,11 @@ package com.gomesdev.sortifyteams.domain.racha;
 
 import com.gomesdev.sortifyteams.domain.racha.request.ConcluirRachaRequest;
 import com.gomesdev.sortifyteams.domain.racha.request.ParticipanteRequest;
+import com.gomesdev.sortifyteams.domain.racha.request.RachaConfigRequest;
 import com.gomesdev.sortifyteams.domain.racha.request.RachaRequest;
+import com.gomesdev.sortifyteams.domain.racha.request.TimesRequest;
+import com.gomesdev.sortifyteams.domain.racha.partida.response.RachaAoVivoResponse;
+import com.gomesdev.sortifyteams.domain.racha.response.RachaPublicoResponse;
 import com.gomesdev.sortifyteams.domain.racha.response.RachaResponse;
 import com.gomesdev.sortifyteams.domain.racha.response.RachaResumoResponse;
 import com.gomesdev.sortifyteams.domain.usuario.Usuario;
@@ -14,10 +18,12 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -44,6 +50,23 @@ public class RachaController {
     @Operation(summary = "Lista os rachas do usuário (organizador ou participante)")
     public ResponseEntity<List<RachaResumoResponse>> listar(@AuthenticationPrincipal Usuario usuario) {
         return ResponseEntity.ok(service.listarDoUsuario(usuario));
+    }
+
+    @GetMapping("/publicos")
+    @Operation(summary = "Lista rachas públicos próximos (por GPS) ou de uma cidade")
+    public ResponseEntity<List<RachaPublicoResponse>> listarPublicos(
+            @RequestParam(required = false) Double lat,
+            @RequestParam(required = false) Double lon,
+            @RequestParam(required = false) String cidade,
+            @RequestParam(required = false) Double raioKm,
+            @AuthenticationPrincipal Usuario usuario) {
+        return ResponseEntity.ok(service.listarPublicos(lat, lon, cidade, raioKm, usuario));
+    }
+
+    @GetMapping("/publicos/cidades")
+    @Operation(summary = "Cidades com rachas públicos abertos (filtro sem GPS)")
+    public ResponseEntity<List<String>> listarCidadesPublicas() {
+        return ResponseEntity.ok(service.listarCidadesPublicas());
     }
 
     @GetMapping("/{id}")
@@ -85,11 +108,34 @@ public class RachaController {
         return ResponseEntity.ok(service.removerParticipante(id, participanteId, usuario));
     }
 
+    @PatchMapping("/{id}/config")
+    @Operation(summary = "Edita a configuração de nível técnico do racha (Fluxo 5)")
+    public ResponseEntity<RachaResponse> atualizarConfiguracao(@PathVariable String id,
+                                                               @Valid @RequestBody RachaConfigRequest request,
+                                                               @AuthenticationPrincipal Usuario usuario) {
+        return ResponseEntity.ok(service.atualizarConfiguracao(id, request, usuario));
+    }
+
     @PostMapping("/{id}/sorteio")
     @Operation(summary = "Sorteia (ou re-sorteia) os times (FR-007)")
     public ResponseEntity<RachaResponse> sortear(@PathVariable String id,
                                                  @AuthenticationPrincipal Usuario usuario) {
         return ResponseEntity.ok(service.sortear(id, usuario));
+    }
+
+    @PatchMapping("/{id}/times")
+    @Operation(summary = "Ajusta manualmente os times sorteados (troca jogadores de time — Fluxo 5)")
+    public ResponseEntity<RachaResponse> atualizarTimes(@PathVariable String id,
+                                                        @Valid @RequestBody TimesRequest request,
+                                                        @AuthenticationPrincipal Usuario usuario) {
+        return ResponseEntity.ok(service.atualizarTimes(id, request, usuario));
+    }
+
+    @PostMapping("/{id}/iniciar")
+    @Operation(summary = "Inicia o racha ao vivo (EM_ANDAMENTO) — habilita partidas e gols")
+    public ResponseEntity<RachaAoVivoResponse> iniciar(@PathVariable String id,
+                                                       @AuthenticationPrincipal Usuario usuario) {
+        return ResponseEntity.ok(service.iniciar(id, usuario));
     }
 
     @PostMapping("/{id}/concluir")

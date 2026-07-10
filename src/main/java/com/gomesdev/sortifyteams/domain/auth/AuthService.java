@@ -41,6 +41,10 @@ public class AuthService {
 
     @Transactional
     public AuthTokens register(RegisterRequest request) {
+        // Espaço acidental no fim do campo (teclado de celular) não pode gerar
+        // uma conta impossível de logar. Senha fica intacta.
+        request = new RegisterRequest(request.nomeCompleto().trim(), request.username().trim(),
+                request.email().trim(), request.senha(), request.role());
         if (request.role() == RoleEnum.ADMIN) {
             throw new IllegalArgumentException("Perfil ADMIN não pode ser registrado.");
         }
@@ -62,11 +66,12 @@ public class AuthService {
     }
 
     public AuthTokens login(LoginRequest request) {
+        String username = request.username().trim();
         authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.username(), request.senha())
+                new UsernamePasswordAuthenticationToken(username, request.senha())
         );
 
-        Usuario usuario = usuarioRepository.findByUsername(request.username()).orElseThrow();
+        Usuario usuario = usuarioRepository.findByUsername(username).orElseThrow();
         garantirAprovado(usuario);
         return issueTokens(usuario);
     }
@@ -90,7 +95,7 @@ public class AuthService {
     /** Dono de quadra REJEITADO pode reenviar a solicitação — volta a PENDENTE (C13). */
     @Transactional
     public void reenviarSolicitacao(ReenviarSolicitacaoRequest request) {
-        Usuario usuario = usuarioRepository.findByUsername(request.username())
+        Usuario usuario = usuarioRepository.findByUsername(request.username().trim())
                 .orElseThrow(() -> new BadCredentialsException("Credenciais inválidas."));
         if (!passwordEncoder.matches(request.senha(), usuario.getSenha())) {
             throw new BadCredentialsException("Credenciais inválidas.");

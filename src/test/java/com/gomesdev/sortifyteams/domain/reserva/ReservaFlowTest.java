@@ -251,6 +251,138 @@ class ReservaFlowTest extends IntegrationTestBase {
     }
 
     @Test
+    @DisplayName("reserva nasce PENDENTE, bloqueia o slot e o dono aceita → CONFIRMADA")
+    void reservaPendenteAteAceite() throws Exception {
+        String rachaId = criarRacha(tokenOrganizador);
+        MvcResult criada = mockMvc.perform(post("/api/reservas")
+                        .header("Authorization", "Bearer " + tokenOrganizador)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(reservaJson(rachaId, List.of(slotsSegunda.get(0)))))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("PENDENTE"))
+                .andReturn();
+        String reservaId = objectMapper.readTree(criada.getResponse().getContentAsString()).get("id").asText();
+
+        // Mesmo pendente, o slot já fica indisponível e outro organizador leva 409.
+        mockMvc.perform(get("/api/quadras/" + quadraId + "/disponibilidade")
+                        .header("Authorization", "Bearer " + tokenOrganizador)
+                        .param("data", proximaSegunda.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.slots[0].disponivel").value(false));
+        String token2 = registrar("orgpend-res" + SEQ.get(), "JOGADOR", false);
+        String racha2 = criarRacha(token2);
+        mockMvc.perform(post("/api/reservas")
+                        .header("Authorization", "Bearer " + token2)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(reservaJson(racha2, List.of(slotsSegunda.get(0)))))
+                .andExpect(status().isConflict());
+
+        // Dono aceita → confirma e avisa o organizador.
+        mockMvc.perform(post("/api/dono/reservas/" + reservaId + "/aceitar")
+                        .header("Authorization", "Bearer " + tokenDono))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CONFIRMADA"));
+        mockMvc.perform(get("/api/notificacoes")
+                        .header("Authorization", "Bearer " + tokenOrganizador))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].tipo").value("RESERVA_CONFIRMADA"));
+    }
+
+    @Test
+    @DisplayName("dono recusa a solicitação pendente e o slot volta a ficar livre")
+    void donoRecusaLiberaSlot() throws Exception {
+        String rachaId = criarRacha(tokenOrganizador);
+        MvcResult criada = mockMvc.perform(post("/api/reservas")
+                        .header("Authorization", "Bearer " + tokenOrganizador)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(reservaJson(rachaId, List.of(slotsSegunda.get(0)))))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String reservaId = objectMapper.readTree(criada.getResponse().getContentAsString()).get("id").asText();
+
+        mockMvc.perform(delete("/api/dono/reservas/" + reservaId)
+                        .header("Authorization", "Bearer " + tokenDono))
+                .andExpect(status().isNoContent());
+
+        // Slot liberado: outro organizador consegue reservar o mesmo horário.
+        String token2 = registrar("orgrec-res" + SEQ.get(), "JOGADOR", false);
+        String racha2 = criarRacha(token2);
+        mockMvc.perform(post("/api/reservas")
+                        .header("Authorization", "Bearer " + token2)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(reservaJson(racha2, List.of(slotsSegunda.get(0)))))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    @DisplayName("grade não pode ser trocada com reserva ativa futura (FIX 2)")
+    void gradeBloqueadaComReservaFutura() throws Exception {
+        String rachaId = criarRacha(tokenOrganizador);
+        MvcResult criada = mockMvc.perform(post("/api/reservas")
+                        .header("Authorization", "Bearer " + tokenOrganizador)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(reservaJson(rachaId, List.of(slotsSegunda.get(0)))))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String reservaId = objectMapper.readTree(criada.getResponse().getContentAsString()).get("id").asText();
+
+        String novaGrade = """
+                {"horarios": [{"diaSemana": 2, "horaInicio": "10:00", "horaFim": "11:00", "preco": 90.00}]}
+                """;
+        mockMvc.perform(put("/api/dono/quadras/" + quadraId + "/horarios")
+                        .header("Authorization", "Bearer " + tokenDono)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(novaGrade))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message[0]")
+                        .value(org.hamcrest.Matchers.containsString("reservas ativas")));
+
+        // Reserva cancelada libera a troca de grade.
+        mockMvc.perform(delete("/api/reservas/" + reservaId)
+                        .header("Authorization", "Bearer " + tokenOrganizador))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(put("/api/dono/quadras/" + quadraId + "/horarios")
+                        .header("Authorization", "Bearer " + tokenDono)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(novaGrade))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @DisplayName("desativar a quadra cancela reservas futuras e avisa o organizador (FIX 3)")
+    void desativarQuadraCancelaReservasFuturas() throws Exception {
+        String rachaId = criarRacha(tokenOrganizador);
+        MvcResult criada = mockMvc.perform(post("/api/reservas")
+                        .header("Authorization", "Bearer " + tokenOrganizador)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(reservaJson(rachaId, List.of(slotsSegunda.get(0)))))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String reservaId = objectMapper.readTree(criada.getResponse().getContentAsString()).get("id").asText();
+
+        mockMvc.perform(delete("/api/dono/quadras/" + quadraId)
+                        .header("Authorization", "Bearer " + tokenDono))
+                .andExpect(status().isNoContent());
+
+        // A reserva não fica presa: continua visível para o organizador, já cancelada.
+        mockMvc.perform(get("/api/reservas/" + reservaId)
+                        .header("Authorization", "Bearer " + tokenOrganizador))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELADA_DONO"));
+
+        // Organizador foi notificado do cancelamento pelo dono.
+        mockMvc.perform(get("/api/notificacoes")
+                        .header("Authorization", "Bearer " + tokenOrganizador))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].tipo").value("RESERVA_CANCELADA_DONO"));
+
+        // Racha foi desvinculado da quadra.
+        mockMvc.perform(get("/api/rachas/" + rachaId)
+                        .header("Authorization", "Bearer " + tokenOrganizador))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     @DisplayName("cancelamento libera o slot para nova reserva e notifica o dono (C10)")
     void cancelamentoLiberaSlot() throws Exception {
         String racha1 = criarRacha(tokenOrganizador);

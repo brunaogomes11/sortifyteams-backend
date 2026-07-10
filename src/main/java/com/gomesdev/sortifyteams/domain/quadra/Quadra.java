@@ -40,6 +40,18 @@ public class Quadra {
     @Schema(description = "Se a quadra aparece na busca de organizadores")
     private boolean ativa = true;
 
+    @Column(name = "latitude")
+    @Schema(description = "Latitude resolvida do endereço (geocoding OpenStreetMap)")
+    private Double latitude;
+
+    @Column(name = "longitude")
+    @Schema(description = "Longitude resolvida do endereço (geocoding OpenStreetMap)")
+    private Double longitude;
+
+    @Column(name = "cidade", length = 120)
+    @Schema(description = "Cidade resolvida do endereço (usada no filtro por cidade)")
+    private String cidade;
+
     @Column(name = "criado_em", nullable = false)
     private LocalDateTime criadoEm;
 
@@ -85,6 +97,12 @@ public class Quadra {
     public void setContato(String contato) { this.contato = contato; }
     public boolean isAtiva() { return ativa; }
     public void setAtiva(boolean ativa) { this.ativa = ativa; }
+    public Double getLatitude() { return latitude; }
+    public void setLatitude(Double latitude) { this.latitude = latitude; }
+    public Double getLongitude() { return longitude; }
+    public void setLongitude(Double longitude) { this.longitude = longitude; }
+    public String getCidade() { return cidade; }
+    public void setCidade(String cidade) { this.cidade = cidade; }
     public LocalDateTime getCriadoEm() { return criadoEm; }
     public void setCriadoEm(LocalDateTime criadoEm) { this.criadoEm = criadoEm; }
 

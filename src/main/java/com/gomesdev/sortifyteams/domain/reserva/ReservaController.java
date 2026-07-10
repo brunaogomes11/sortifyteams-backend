@@ -47,7 +47,7 @@ public class ReservaController {
         } catch (DataIntegrityViolationException e) {
             // Corrida entre transações (C8): a transação da criação já foi
             // revertida; monta o 409 com alternativas numa transação nova.
-            throw service.conflito(request.quadraId(), request.data());
+            throw service.conflito(request.quadraId(), request.data(), true);
         }
     }
 

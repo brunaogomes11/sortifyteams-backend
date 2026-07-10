@@ -116,12 +116,53 @@ class QuadraFlowTest extends IntegrationTestBase {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"horarios": [
-                                  {"diaSemana": 1, "horaInicio": "18:00", "horaFim": "19:30", "preco": 120.00},
-                                  {"diaSemana": 1, "horaInicio": "19:00", "horaFim": "20:00", "preco": 140.00}
+                                  {"diaSemana": 1, "horaInicio": "18:00", "horaFim": "20:00", "preco": 120.00},
+                                  {"diaSemana": 1, "horaInicio": "19:00", "horaFim": "21:00", "preco": 140.00}
                                 ]}
                                 """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message[0]").value(org.hamcrest.Matchers.containsString("sobrepostos")));
+    }
+
+    @Test
+    @DisplayName("faixa de 3 horas expande em 3 reservas de 1 hora com o preço por hora (FIX 15)")
+    void faixaExpandeEmSlotsDeUmaHora() throws Exception {
+        String quadraId = criarQuadra();
+
+        mockMvc.perform(put("/api/dono/quadras/" + quadraId + "/horarios")
+                        .header("Authorization", "Bearer " + tokenDono)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"horarios": [
+                                  {"diaSemana": 5, "horaInicio": "18:00", "horaFim": "21:00", "preco": 100.00}
+                                ]}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.horarios.length()").value(3))
+                .andExpect(jsonPath("$.horarios[0].horaInicio").value("18:00:00"))
+                .andExpect(jsonPath("$.horarios[0].horaFim").value("19:00:00"))
+                .andExpect(jsonPath("$.horarios[1].horaInicio").value("19:00:00"))
+                .andExpect(jsonPath("$.horarios[2].horaInicio").value("20:00:00"))
+                .andExpect(jsonPath("$.horarios[2].horaFim").value("21:00:00"))
+                .andExpect(jsonPath("$.horarios[0].preco").value(100.00))
+                .andExpect(jsonPath("$.horarios[2].preco").value(100.00));
+    }
+
+    @Test
+    @DisplayName("faixa que não fecha hora inteira responde 400 (FIX 15)")
+    void faixaQuebradaResponde400() throws Exception {
+        String quadraId = criarQuadra();
+
+        mockMvc.perform(put("/api/dono/quadras/" + quadraId + "/horarios")
+                        .header("Authorization", "Bearer " + tokenDono)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"horarios": [
+                                  {"diaSemana": 1, "horaInicio": "18:00", "horaFim": "19:30", "preco": 120.00}
+                                ]}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message[0]").value(org.hamcrest.Matchers.containsString("horas inteiras")));
     }
 
     @Test

@@ -87,6 +87,29 @@ class SorteioServiceTest {
     }
 
     @Test
+    @DisplayName("goleiros fora do sorteio: só a linha entra nos times numerados")
+    void goleirosForaDoSorteio() {
+        // 10 jogadores, 2 goleiros → 8 de linha distribuídos em 2 times (4/4); goleiros não entram
+        List<TimeSorteado> times = service.sortear(jogadores(10, 2), 2, false, 4, false, new Random(5));
+        assertThat(times).hasSize(2);
+        int totalLinha = times.stream().mapToInt(t -> t.jogadores().size()).sum();
+        assertThat(totalLinha).isEqualTo(8);
+        for (TimeSorteado time : times) {
+            assertThat(time.jogadores()).noneMatch(JogadorSorteio::goleiro);
+        }
+    }
+
+    @Test
+    @DisplayName("goleiros fora: mínimo conta só a linha (goleiros não contam)")
+    void goleirosForaLinhaInsuficiente() {
+        // 9 jogadores, 2 goleiros → 7 de linha; mínimo 8 para 2 times de 4 → erro
+        assertThatThrownBy(() ->
+                service.sortear(jogadores(9, 2), 2, false, 4, false, new Random(1)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("pelo menos 8");
+    }
+
+    @Test
     @DisplayName("balancear nível: somas de nível próximas entre os times (C5)")
     void balanceamentoDeNivel() {
         // Níveis bem heterogêneos

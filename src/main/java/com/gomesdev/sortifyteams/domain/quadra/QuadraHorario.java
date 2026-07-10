@@ -47,6 +47,15 @@ public class QuadraHorario {
         this.preco = request.preco();
     }
 
+    /** Slot de 1 hora expandido a partir de uma faixa maior (FIX 15 — cada reserva dura 1 hora). */
+    public QuadraHorario(String quadraId, int diaSemana, LocalTime horaInicio, LocalTime horaFim, BigDecimal preco) {
+        this.quadraId = quadraId;
+        this.diaSemana = diaSemana;
+        this.horaInicio = horaInicio;
+        this.horaFim = horaFim;
+        this.preco = preco;
+    }
+
     @PrePersist
     public void prePersist() {
         if (this.id == null) {

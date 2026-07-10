@@ -1,6 +1,7 @@
 package com.gomesdev.sortifyteams.domain.reserva;
 
 import com.gomesdev.sortifyteams.domain.reserva.response.AgendaItemResponse;
+import com.gomesdev.sortifyteams.domain.reserva.response.ReservaResponse;
 import com.gomesdev.sortifyteams.domain.usuario.Usuario;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -11,6 +12,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -41,8 +43,15 @@ public class DonoReservaController {
         return ResponseEntity.ok(reservaService.agenda(dono, inicio, fim));
     }
 
+    @PostMapping("/reservas/{id}/aceitar")
+    @Operation(summary = "Dono aceita a solicitação pendente — confirma a reserva e avisa a galera")
+    public ResponseEntity<ReservaResponse> aceitar(@PathVariable String id,
+                                                   @AuthenticationPrincipal Usuario dono) {
+        return ResponseEntity.ok(reservaService.aceitar(id, dono));
+    }
+
     @DeleteMapping("/reservas/{id}")
-    @Operation(summary = "Dono cancela uma reserva — libera os horários e avisa os jogadores (C10)")
+    @Operation(summary = "Dono recusa (pendente) ou cancela (confirmada) — libera os horários e avisa (C10)")
     public ResponseEntity<Void> cancelar(@PathVariable String id,
                                          @AuthenticationPrincipal Usuario dono) {
         reservaService.cancelarPeloDono(id, dono);

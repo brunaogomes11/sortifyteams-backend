@@ -242,23 +242,30 @@ class ConviteECascataFlowTest extends IntegrationTestBase {
                 .andExpect(status().isCreated());
 
         LocalDate segunda = LocalDate.now().with(TemporalAdjusters.next(DayOfWeek.MONDAY));
-        mockMvc.perform(post("/api/reservas")
+        MvcResult reservaCriada = mockMvc.perform(post("/api/reservas")
                         .header("Authorization", "Bearer " + tokenOrganizador)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"quadraId": "%s", "rachaId": "%s", "data": "%s", "quadraHorarioIds": ["%s"]}
                                 """.formatted(quadraId, rachaId, segunda, slotId)))
-                .andExpect(status().isCreated());
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("PENDENTE"))
+                .andReturn();
+        String reservaId = objectMapper.readTree(reservaCriada.getResponse().getContentAsString())
+                .get("id").asText();
 
-        // Agenda do dono mostra a reserva com quem reservou
-        MvcResult agenda = mockMvc.perform(get("/api/dono/agenda")
+        // Dono aceita a solicitação (PENDENTE → CONFIRMADA)
+        mockMvc.perform(post("/api/dono/reservas/" + reservaId + "/aceitar")
+                        .header("Authorization", "Bearer " + tokenDono))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CONFIRMADA"));
+
+        // Agenda do dono mostra a reserva confirmada com quem reservou
+        mockMvc.perform(get("/api/dono/agenda")
                         .header("Authorization", "Bearer " + tokenDono))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].organizadorNome").value("Usuario Convite"))
-                .andExpect(jsonPath("$[0].status").value("CONFIRMADA"))
-                .andReturn();
-        String reservaId = objectMapper.readTree(agenda.getResponse().getContentAsString())
-                .get(0).get("reservaId").asText();
+                .andExpect(jsonPath("$[0].status").value("CONFIRMADA"));
 
         // Dono cancela
         mockMvc.perform(delete("/api/dono/reservas/" + reservaId)

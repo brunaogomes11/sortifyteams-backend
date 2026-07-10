@@ -16,7 +16,10 @@ import org.testcontainers.containers.PostgreSQLContainer;
  * fim da JVM.
  */
 @SpringBootTest
-@TestPropertySource(properties = "jwt.secret=c2VncmVkby1kZS10ZXN0ZS1jb20tdGFtYW5oby1zdWZpY2llbnRlLXBhcmEtaHMyNTY=")
+@TestPropertySource(properties = {
+        "jwt.secret=c2VncmVkby1kZS10ZXN0ZS1jb20tdGFtYW5oby1zdWZpY2llbnRlLXBhcmEtaHMyNTY=",
+        "app.geocoding.enabled=false"
+})
 public abstract class IntegrationTestBase {
 
     @ServiceConnection

@@ -33,7 +33,7 @@ public class Reserva {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 30)
-    private StatusReservaEnum status = StatusReservaEnum.CONFIRMADA;
+    private StatusReservaEnum status = StatusReservaEnum.PENDENTE;
 
     @Column(name = "preco_total", nullable = false, precision = 10, scale = 2)
     private BigDecimal precoTotal;

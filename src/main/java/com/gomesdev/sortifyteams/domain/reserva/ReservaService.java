@@ -10,6 +10,7 @@ import com.gomesdev.sortifyteams.domain.quadra.response.HorarioResponse;
 import com.gomesdev.sortifyteams.domain.racha.ParticipanteRacha;
 import com.gomesdev.sortifyteams.domain.racha.ParticipanteRachaRepository;
 import com.gomesdev.sortifyteams.domain.racha.Racha;
+import com.gomesdev.sortifyteams.domain.racha.RachaLocalizacaoService;
 import com.gomesdev.sortifyteams.domain.racha.RachaRepository;
 import com.gomesdev.sortifyteams.domain.reserva.request.ReservaRequest;
 import com.gomesdev.sortifyteams.domain.reserva.response.AgendaItemResponse;
@@ -28,8 +29,11 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.time.format.TextStyle;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -38,6 +42,11 @@ import java.util.stream.Collectors;
 public class ReservaService {
 
     private static final DateTimeFormatter HORA = DateTimeFormatter.ofPattern("HH:mm");
+    private static final DateTimeFormatter DATA_BR = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+
+    /** Status que ainda ocupam o slot e contam como reserva "viva". */
+    private static final List<StatusReservaEnum> ATIVAS =
+            List.of(StatusReservaEnum.PENDENTE, StatusReservaEnum.CONFIRMADA);
 
     private final ReservaRepository reservaRepository;
     private final ReservaHorarioRepository reservaHorarioRepository;
@@ -48,6 +57,7 @@ public class ReservaService {
     private final ParticipanteRachaRepository participanteRepository;
     private final UsuarioRepository usuarioRepository;
     private final NotificacaoService notificacaoService;
+    private final RachaLocalizacaoService rachaLocalizacaoService;
 
     public ReservaService(ReservaRepository reservaRepository,
                           ReservaHorarioRepository reservaHorarioRepository,
@@ -57,7 +67,8 @@ public class ReservaService {
                           RachaRepository rachaRepository,
                           ParticipanteRachaRepository participanteRepository,
                           UsuarioRepository usuarioRepository,
-                          NotificacaoService notificacaoService) {
+                          NotificacaoService notificacaoService,
+                          RachaLocalizacaoService rachaLocalizacaoService) {
         this.reservaRepository = reservaRepository;
         this.reservaHorarioRepository = reservaHorarioRepository;
         this.quadraHorarioRepository = quadraHorarioRepository;
@@ -67,6 +78,7 @@ public class ReservaService {
         this.participanteRepository = participanteRepository;
         this.usuarioRepository = usuarioRepository;
         this.notificacaoService = notificacaoService;
+        this.rachaLocalizacaoService = rachaLocalizacaoService;
     }
 
     @Transactional
@@ -79,8 +91,9 @@ public class ReservaService {
         if (racha.getStatus() != StatusRachaEnum.ABERTO) {
             throw new IllegalArgumentException("O racha não está mais aberto.");
         }
-        if (reservaRepository.findByRachaIdAndStatus(racha.getId(), StatusReservaEnum.CONFIRMADA).isPresent()) {
-            throw new IllegalArgumentException("Este racha já tem uma reserva confirmada.");
+        if (reservaRepository.existsByRachaIdAndStatusIn(racha.getId(), ATIVAS)) {
+            throw new IllegalArgumentException(
+                    "Este racha já tem uma reserva em andamento (pendente ou confirmada).");
         }
 
         Quadra quadra = quadraPublicaService.buscarAtiva(request.quadraId());
@@ -99,7 +112,8 @@ public class ReservaService {
                 throw new IllegalArgumentException(
                         "O horário %s–%s é de outro dia da semana (a data %s cai em %s)."
                                 .formatted(slot.getHoraInicio().format(HORA), slot.getHoraFim().format(HORA),
-                                        request.data(), request.data().getDayOfWeek()));
+                                        request.data().format(DATA_BR),
+                                        request.data().getDayOfWeek().getDisplayName(TextStyle.FULL, Locale.of("pt", "BR"))));
             }
         }
 
@@ -108,7 +122,7 @@ public class ReservaService {
         List<ReservaHorario> ocupados = reservaHorarioRepository
                 .findByQuadraHorarioIdInAndData(List.copyOf(idsUnicos), request.data());
         if (!ocupados.isEmpty()) {
-            throw conflito(quadra.getId(), request.data());
+            throw conflito(quadra.getId(), request.data(), false);
         }
 
         BigDecimal precoTotal = slots.stream()
@@ -127,12 +141,57 @@ public class ReservaService {
         racha.setQuadraId(quadra.getId());
         racha.setData(request.data());
         racha.setHorario(slots.stream().map(QuadraHorario::getHoraInicio).min(java.time.LocalTime::compareTo).orElse(null));
+        // Herda as coordenadas da quadra para a busca pública por proximidade (FIX 1) —
+        // sempre que a quadra tiver coordenadas, mesmo em racha privado (inofensivo e mantém consistência).
+        if (quadra.getLatitude() != null) {
+            racha.setLatitude(quadra.getLatitude());
+            racha.setLongitude(quadra.getLongitude());
+            racha.setCidade(quadra.getCidade());
+        }
         rachaRepository.save(racha);
 
-        notificacaoService.notificar(quadra.getDonoId(), "RESERVA_CRIADA",
-                "Nova reserva na " + quadra.getNome(),
-                "Reserva confirmada para %s (%s horário%s)."
-                        .formatted(request.data(), slots.size(), slots.size() == 1 ? "" : "s"));
+        // A reserva nasce PENDENTE: o slot já fica bloqueado, mas o dono precisa
+        // aceitar. Só o dono é avisado agora; organizador e jogadores são
+        // notificados quando (e se) o dono confirmar.
+        notificacaoService.notificar(quadra.getDonoId(), "RESERVA_SOLICITADA",
+                "Nova solicitação de reserva na " + quadra.getNome(),
+                "%s pediu %s para %s. Aceite ou recuse na sua agenda."
+                        .formatted(organizador.getNomeCompleto(),
+                                slots.size() == 1 ? "1 horário" : slots.size() + " horários",
+                                request.data().format(DATA_BR)));
+
+        return montarResponse(reserva, quadra);
+    }
+
+    /** Dono aceita a solicitação: PENDENTE → CONFIRMADA. Avisa organizador e jogadores. */
+    @Transactional
+    public ReservaResponse aceitar(String reservaId, Usuario dono) {
+        Reserva reserva = buscarEntidade(reservaId);
+        Quadra quadra = quadraRepository.findById(reserva.getQuadraId())
+                .orElseThrow(() -> new EntityNotFoundException("Quadra não encontrada: " + reserva.getQuadraId()));
+        if (!quadra.getDonoId().equals(dono.getId())) {
+            throw new AccessDeniedException("Esta reserva é de uma quadra de outro dono.");
+        }
+        if (reserva.getStatus() != StatusReservaEnum.PENDENTE) {
+            throw new IllegalArgumentException("Só dá para aceitar uma reserva pendente.");
+        }
+
+        reserva.setStatus(StatusReservaEnum.CONFIRMADA);
+        reservaRepository.save(reserva);
+
+        Racha racha = rachaRepository.findById(reserva.getRachaId()).orElseThrow();
+        String corpo = "O racha foi confirmado para %s às %s na %s."
+                .formatted(reserva.getData().format(DATA_BR),
+                        racha.getHorario() != null ? racha.getHorario().format(HORA) : "?",
+                        quadra.getNome());
+        notificacaoService.notificar(racha.getOrganizadorId(), "RESERVA_CONFIRMADA",
+                "Reserva confirmada na " + quadra.getNome(), corpo);
+        participanteRepository.findByRachaId(racha.getId()).stream()
+                .map(ParticipanteRacha::getUsuarioId)
+                .filter(id -> id != null && !id.equals(racha.getOrganizadorId()))
+                .distinct()
+                .forEach(usuarioId -> notificacaoService.notificar(
+                        usuarioId, "RESERVA_CONFIRMADA", "Racha confirmado", corpo));
 
         return montarResponse(reserva, quadra);
     }
@@ -140,7 +199,9 @@ public class ReservaService {
     @Transactional(readOnly = true)
     public ReservaResponse detalhar(String reservaId, Usuario usuario) {
         Reserva reserva = buscarEntidade(reservaId);
-        Quadra quadra = quadraPublicaService.buscarAtiva(reserva.getQuadraId());
+        // Quadra pode ter sido desativada nesse meio-tempo — isso não pode esconder a reserva (FIX 3).
+        Quadra quadra = quadraRepository.findById(reserva.getQuadraId())
+                .orElseThrow(() -> new EntityNotFoundException("Quadra não encontrada: " + reserva.getQuadraId()));
         Racha racha = rachaRepository.findById(reserva.getRachaId()).orElseThrow();
         boolean organizador = racha.getOrganizadorId().equals(usuario.getId());
         boolean dono = quadra.getDonoId().equals(usuario.getId());
@@ -158,7 +219,8 @@ public class ReservaService {
         if (!racha.getOrganizadorId().equals(usuario.getId())) {
             throw new AccessDeniedException("Apenas o organizador pode cancelar a reserva.");
         }
-        if (reserva.getStatus() != StatusReservaEnum.CONFIRMADA) {
+        // Cancela tanto a solicitação pendente quanto a reserva já confirmada.
+        if (!ATIVAS.contains(reserva.getStatus())) {
             throw new IllegalArgumentException("A reserva já está cancelada.");
         }
 
@@ -167,32 +229,36 @@ public class ReservaService {
         reservaHorarioRepository.deleteByReservaId(reserva.getId());
 
         racha.setQuadraId(null);
+        if (racha.isPublico()) {
+            rachaLocalizacaoService.resolver(racha);
+        }
         rachaRepository.save(racha);
 
-        Quadra quadra = quadraPublicaService.buscarAtiva(reserva.getQuadraId());
+        // Quadra pode ter sido desativada nesse meio-tempo — isso não pode barrar o cancelamento (FIX 3).
+        Quadra quadra = quadraRepository.findById(reserva.getQuadraId())
+                .orElseThrow(() -> new EntityNotFoundException("Quadra não encontrada: " + reserva.getQuadraId()));
         notificacaoService.notificar(quadra.getDonoId(), "RESERVA_CANCELADA",
                 "Reserva cancelada na " + quadra.getNome(),
-                "O organizador cancelou a reserva de %s.".formatted(reserva.getData()));
+                "O organizador cancelou a reserva de %s.".formatted(reserva.getData().format(DATA_BR)));
     }
 
-    /** C10: racha cancelado cancela a reserva confirmada e notifica o dono. */
+    /** C10: racha cancelado cancela a reserva ativa (pendente/confirmada) e notifica o dono. */
     @Transactional
     public void cancelarPorCancelamentoDoRacha(String rachaId) {
-        reservaRepository.findByRachaIdAndStatus(rachaId, StatusReservaEnum.CONFIRMADA)
-                .ifPresent(reserva -> {
-                    reserva.setStatus(StatusReservaEnum.CANCELADA_ORGANIZADOR);
-                    reservaRepository.save(reserva);
-                    reservaHorarioRepository.deleteByReservaId(reserva.getId());
+        for (Reserva reserva : reservaRepository.findByRachaIdAndStatusIn(rachaId, ATIVAS)) {
+            reserva.setStatus(StatusReservaEnum.CANCELADA_ORGANIZADOR);
+            reservaRepository.save(reserva);
+            reservaHorarioRepository.deleteByReservaId(reserva.getId());
 
-                    Quadra quadra = quadraRepository.findById(reserva.getQuadraId()).orElseThrow();
-                    notificacaoService.notificar(quadra.getDonoId(), "RESERVA_CANCELADA",
-                            "Reserva cancelada na " + quadra.getNome(),
-                            "O racha foi cancelado pelo organizador; o horário de %s foi liberado."
-                                    .formatted(reserva.getData()));
-                });
+            Quadra quadra = quadraRepository.findById(reserva.getQuadraId()).orElseThrow();
+            notificacaoService.notificar(quadra.getDonoId(), "RESERVA_CANCELADA",
+                    "Reserva cancelada na " + quadra.getNome(),
+                    "O racha foi cancelado pelo organizador; o horário de %s foi liberado."
+                            .formatted(reserva.getData().format(DATA_BR)));
+        }
     }
 
-    /** C10: dono cancela a reserva — avisa o organizador e os jogadores cadastrados. */
+    /** C10: dono recusa (pendente) ou cancela (confirmada) — libera o slot e avisa a galera. */
     @Transactional
     public void cancelarPeloDono(String reservaId, Usuario dono) {
         Reserva reserva = buscarEntidade(reservaId);
@@ -200,9 +266,10 @@ public class ReservaService {
         if (!quadra.getDonoId().equals(dono.getId())) {
             throw new AccessDeniedException("Esta reserva é de uma quadra de outro dono.");
         }
-        if (reserva.getStatus() != StatusReservaEnum.CONFIRMADA) {
-            throw new IllegalArgumentException("A reserva já está cancelada.");
+        if (!ATIVAS.contains(reserva.getStatus())) {
+            throw new IllegalArgumentException("Esta reserva já não está mais ativa.");
         }
+        boolean eraPendente = reserva.getStatus() == StatusReservaEnum.PENDENTE;
 
         reserva.setStatus(StatusReservaEnum.CANCELADA_DONO);
         reservaRepository.save(reserva);
@@ -210,11 +277,19 @@ public class ReservaService {
 
         Racha racha = rachaRepository.findById(reserva.getRachaId()).orElseThrow();
         racha.setQuadraId(null);
+        if (racha.isPublico()) {
+            rachaLocalizacaoService.resolver(racha);
+        }
         rachaRepository.save(racha);
 
-        String titulo = "Reserva cancelada pela " + quadra.getNome();
-        String corpo = "O dono da quadra cancelou a reserva de %s. Escolha outra quadra ou horário."
-                .formatted(reserva.getData());
+        String titulo = eraPendente
+                ? "Solicitação recusada pela " + quadra.getNome()
+                : "Reserva cancelada pela " + quadra.getNome();
+        String corpo = eraPendente
+                ? "A quadra recusou o pedido de reserva de %s. Escolha outra quadra ou horário."
+                        .formatted(reserva.getData().format(DATA_BR))
+                : "O dono da quadra cancelou a reserva de %s. Escolha outra quadra ou horário."
+                        .formatted(reserva.getData().format(DATA_BR));
         notificacaoService.notificar(racha.getOrganizadorId(), "RESERVA_CANCELADA_DONO", titulo, corpo);
         participanteRepository.findByRachaId(racha.getId()).stream()
                 .map(ParticipanteRacha::getUsuarioId)
@@ -222,6 +297,45 @@ public class ReservaService {
                 .distinct()
                 .forEach(usuarioId -> notificacaoService.notificar(
                         usuarioId, "RESERVA_CANCELADA_DONO", titulo, corpo));
+    }
+
+    /**
+     * Dono desativou a quadra: cancela todas as reservas confirmadas futuras
+     * dessa quadra, desvincula o racha e notifica organizador + jogadores (FIX 3).
+     */
+    @Transactional
+    public void cancelarPorDesativacaoDaQuadra(String quadraId) {
+        List<Reserva> futuras = reservaRepository.findByQuadraIdAndStatusInAndDataGreaterThanEqual(
+                quadraId, ATIVAS, LocalDate.now());
+        if (futuras.isEmpty()) {
+            return;
+        }
+        Quadra quadra = quadraRepository.findById(quadraId)
+                .orElseThrow(() -> new EntityNotFoundException("Quadra não encontrada: " + quadraId));
+
+        for (Reserva reserva : futuras) {
+            reserva.setStatus(StatusReservaEnum.CANCELADA_DONO);
+            reservaRepository.save(reserva);
+            reservaHorarioRepository.deleteByReservaId(reserva.getId());
+
+            Racha racha = rachaRepository.findById(reserva.getRachaId()).orElseThrow();
+            racha.setQuadraId(null);
+            if (racha.isPublico()) {
+                rachaLocalizacaoService.resolver(racha);
+            }
+            rachaRepository.save(racha);
+
+            String titulo = "Reserva cancelada pela " + quadra.getNome();
+            String corpo = "O dono desativou a quadra %s; a reserva de %s foi cancelada. Escolha outra quadra."
+                    .formatted(quadra.getNome(), reserva.getData().format(DATA_BR));
+            notificacaoService.notificar(racha.getOrganizadorId(), "RESERVA_CANCELADA_DONO", titulo, corpo);
+            participanteRepository.findByRachaId(racha.getId()).stream()
+                    .map(ParticipanteRacha::getUsuarioId)
+                    .filter(id -> id != null && !id.equals(racha.getOrganizadorId()))
+                    .distinct()
+                    .forEach(usuarioId -> notificacaoService.notificar(
+                            usuarioId, "RESERVA_CANCELADA_DONO", titulo, corpo));
+        }
     }
 
     /** Agenda do dono (T034): reservas nas quadras dele no período. */
@@ -232,9 +346,11 @@ public class ReservaService {
                     Quadra quadra = quadraRepository.findById(reserva.getQuadraId()).orElseThrow();
                     Racha racha = rachaRepository.findById(reserva.getRachaId()).orElseThrow();
                     Usuario organizador = usuarioRepository.findById(racha.getOrganizadorId()).orElseThrow();
+                    // Slots podem ter sumido da grade (redefinição de horários) — omite o
+                    // detalhe em vez de derrubar a tela com 500 (FIX 2).
                     List<HorarioResponse> horarios = reservaHorarioRepository
                             .findByReservaId(reserva.getId()).stream()
-                            .map(rh -> quadraHorarioRepository.findById(rh.getQuadraHorarioId()).orElseThrow())
+                            .flatMap(rh -> quadraHorarioRepository.findById(rh.getQuadraHorarioId()).stream())
                             .map(HorarioResponse::new)
                             .toList();
                     return new AgendaItemResponse(reserva.getId(), quadra.getId(), quadra.getNome(),
@@ -268,9 +384,16 @@ public class ReservaService {
 
     // ---------- conflito ----------
 
-    /** Monta o 409 com alternativas. Usado na pré-checagem e, pelo controller, na corrida. */
+    /**
+     * Monta o 409 com alternativas.
+     *
+     * @param corrida {@code false} na pré-checagem dentro da própria criação (caminho comum);
+     *                {@code true} quando chamado pelo controller a partir do catch de
+     *                {@link org.springframework.dao.DataIntegrityViolationException} (corrida real
+     *                entre transações).
+     */
     @Transactional(readOnly = true)
-    public ConflitoHorarioException conflito(String quadraId, LocalDate data) {
+    public ConflitoHorarioException conflito(String quadraId, LocalDate data, boolean corrida) {
         List<DisponibilidadeResponse.Slot> livres = disponibilidade(quadraId, data).slots().stream()
                 .filter(DisponibilidadeResponse.Slot::disponivel)
                 .toList();
@@ -279,8 +402,10 @@ public class ReservaService {
                 : "Horários ainda livres nesta data: " + livres.stream()
                         .map(s -> s.horaInicio().format(HORA) + "–" + s.horaFim().format(HORA))
                         .collect(Collectors.joining(", ")) + ".";
-        return new ConflitoHorarioException(
-                "Um dos horários acabou de ser reservado por outro organizador. " + alternativas);
+        String mensagem = corrida
+                ? "Um dos horários acabou de ser reservado por outro organizador. " + alternativas
+                : "Um dos horários já está reservado nesta data. " + alternativas;
+        return new ConflitoHorarioException(mensagem);
     }
 
     // ---------- privados ----------
@@ -291,8 +416,10 @@ public class ReservaService {
     }
 
     private ReservaResponse montarResponse(Reserva reserva, Quadra quadra) {
+        // Slots podem ter sumido da grade (redefinição de horários) — omite o
+        // detalhe em vez de derrubar a tela com 500 (FIX 2).
         List<HorarioResponse> horarios = reservaHorarioRepository.findByReservaId(reserva.getId()).stream()
-                .map(rh -> quadraHorarioRepository.findById(rh.getQuadraHorarioId()).orElseThrow())
+                .flatMap(rh -> quadraHorarioRepository.findById(rh.getQuadraHorarioId()).stream())
                 .map(HorarioResponse::new)
                 .toList();
         return new ReservaResponse(reserva, quadra.getNome(), quadra.getContato(), horarios);

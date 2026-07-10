@@ -17,8 +17,11 @@ import java.util.Random;
  *
  * Regras:
  * - Mínimo (C6): total de jogadores >= minimoPorTime × qtdTimes.
- * - Goleiros: quando o esporte exige, são distribuídos um por time antes dos
- *   demais; goleiros excedentes entram no bolo como jogadores de linha.
+ * - Goleiros: com "incluir goleiros" ativo (padrão), quando o esporte exige são
+ *   distribuídos um por time antes dos demais e os excedentes entram no bolo como
+ *   jogadores de linha. Com "incluir goleiros" desligado, eles ficam de fora dos
+ *   times numerados (só a linha é distribuída) — o grupo "Goleiros" é montado
+ *   fora daqui, na camada de serviço.
  * - Balanceamento (C5): com "balancear nível" ativo, cada jogador (do maior
  *   nível para o menor) vai para o time com menos jogadores e, em empate,
  *   com a menor soma de nível — o excedente termina nos times de menor nível
@@ -37,14 +40,30 @@ public class SorteioService {
                                       boolean balancearNivel,
                                       int minimoPorTime,
                                       Random random) {
+        return sortear(jogadores, qtdTimes, balancearNivel, minimoPorTime, true, random);
+    }
+
+    public List<TimeSorteado> sortear(List<JogadorSorteio> jogadores,
+                                      int qtdTimes,
+                                      boolean balancearNivel,
+                                      int minimoPorTime,
+                                      boolean incluirGoleiros,
+                                      Random random) {
         if (qtdTimes < 2) {
             throw new IllegalArgumentException("O sorteio precisa de pelo menos 2 times.");
         }
+
+        // Com os goleiros fora do sorteio, só os jogadores de linha entram nos
+        // times numerados; o grupo "Goleiros" é montado depois, no serviço.
+        List<JogadorSorteio> aDistribuir = incluirGoleiros
+                ? jogadores
+                : jogadores.stream().filter(j -> !j.goleiro()).toList();
+
         int minimoTotal = minimoPorTime * qtdTimes;
-        if (jogadores.size() < minimoTotal) {
+        if (aDistribuir.size() < minimoTotal) {
             throw new IllegalArgumentException(
                     "Jogadores insuficientes para o sorteio: são necessários pelo menos %d (%d por time × %d times) e há %d."
-                            .formatted(minimoTotal, minimoPorTime, qtdTimes, jogadores.size()));
+                            .formatted(minimoTotal, minimoPorTime, qtdTimes, aDistribuir.size()));
         }
 
         List<List<JogadorSorteio>> times = new ArrayList<>();
@@ -53,17 +72,22 @@ public class SorteioService {
             times.add(new ArrayList<>());
         }
 
-        // 1) Goleiros: um por time, em ordem aleatória; excedentes viram linha.
-        List<JogadorSorteio> goleiros = new ArrayList<>(jogadores.stream().filter(JogadorSorteio::goleiro).toList());
-        Collections.shuffle(goleiros, random);
-        List<JogadorSorteio> restantes = new ArrayList<>(jogadores.stream().filter(j -> !j.goleiro()).toList());
-        for (int i = 0; i < goleiros.size(); i++) {
-            if (i < qtdTimes) {
-                times.get(i).add(goleiros.get(i));
-                somaNivel[i] += goleiros.get(i).nivelTecnico();
-            } else {
-                restantes.add(goleiros.get(i));
+        List<JogadorSorteio> restantes;
+        if (incluirGoleiros) {
+            // 1) Goleiros: um por time, em ordem aleatória; excedentes viram linha.
+            List<JogadorSorteio> goleiros = new ArrayList<>(aDistribuir.stream().filter(JogadorSorteio::goleiro).toList());
+            Collections.shuffle(goleiros, random);
+            restantes = new ArrayList<>(aDistribuir.stream().filter(j -> !j.goleiro()).toList());
+            for (int i = 0; i < goleiros.size(); i++) {
+                if (i < qtdTimes) {
+                    times.get(i).add(goleiros.get(i));
+                    somaNivel[i] += goleiros.get(i).nivelTecnico();
+                } else {
+                    restantes.add(goleiros.get(i));
+                }
             }
+        } else {
+            restantes = new ArrayList<>(aDistribuir);
         }
 
         // 2) Demais jogadores.

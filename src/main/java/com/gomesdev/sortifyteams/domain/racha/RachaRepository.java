@@ -22,6 +22,23 @@ public interface RachaRepository extends JpaRepository<Racha, String> {
 
     List<Racha> findByDataAndStatus(java.time.LocalDate data, com.gomesdev.sortifyteams.enums.StatusRachaEnum status);
 
+    /** Rachas abertos com data já passada — candidatos a expirar (RachaExpiracaoService). */
+    List<Racha> findByStatusAndDataBefore(com.gomesdev.sortifyteams.enums.StatusRachaEnum status,
+                                          java.time.LocalDate data);
+
+    /** Rachas ao vivo (EM_ANDAMENTO) esquecidos há mais de 24h (RachaExpiracaoService). */
+    List<Racha> findByStatusAndIniciadoEmBefore(com.gomesdev.sortifyteams.enums.StatusRachaEnum status,
+                                                java.time.LocalDateTime iniciadoEm);
+
+    /** Rachas públicos e abertos, ainda por acontecer (sem data ou de hoje em diante). */
+    @Query("""
+            select r from Racha r
+            where r.publico = true
+              and r.status = com.gomesdev.sortifyteams.enums.StatusRachaEnum.ABERTO
+              and (r.data is null or r.data >= :hoje)
+            """)
+    List<Racha> findPublicosAbertos(@Param("hoje") java.time.LocalDate hoje);
+
     /** Contador de rachas concluídos do usuário (perfil — FR-012). */
     @Query("""
             select count(r) from Racha r

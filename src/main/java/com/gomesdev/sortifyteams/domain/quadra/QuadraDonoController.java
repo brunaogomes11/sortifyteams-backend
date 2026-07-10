@@ -74,7 +74,8 @@ public class QuadraDonoController {
     }
 
     @PutMapping("/{id}/horarios")
-    @Operation(summary = "Define a grade semanal recorrente (substitui a anterior)")
+    @Operation(summary = "Define a grade semanal recorrente (substitui a anterior)",
+            description = "Cada item é uma faixa (ex.: 18:00–23:00) dividida automaticamente em reservas de 1 hora, com o preço informado por hora. Bloqueado enquanto houver reservas confirmadas futuras.")
     public ResponseEntity<QuadraResponse> definirHorarios(@PathVariable String id,
                                                           @Valid @RequestBody HorariosRequest request,
                                                           @AuthenticationPrincipal Usuario dono) {
