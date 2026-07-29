@@ -94,13 +94,14 @@ public class SecurityConfig {
     }
 
     /** Fora de /api e /admin só existem a landing pública (/ e /landing/**),
-     *  Swagger, arquivos públicos, a landing de convite (/convite/**) e /error. */
+     *  o download do APK (/downloads/**), Swagger, arquivos públicos,
+     *  a landing de convite (/convite/**) e /error. */
     @Bean
     @Order(3)
     public SecurityFilterChain catchAllChain(HttpSecurity http) throws Exception {
         http
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/", "/index.html", "/landing/**").permitAll()
+                        .requestMatchers("/", "/index.html", "/landing/**", "/downloads/**").permitAll()
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
                         .requestMatchers("/files/**").permitAll()
                         .requestMatchers("/convite/**").permitAll()
