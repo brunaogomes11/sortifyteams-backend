@@ -6,6 +6,12 @@
       "runtimeExecutable": ".\\mvnw.cmd",
       "runtimeArgs": ["spring-boot:run", "-Dspring-boot.run.arguments=--server.port=8090"],
       "port": 8090
+    },
+    {
+      "name": "landing-static",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8124", "--directory", "src\\main\\resources\\static"],
+      "port": 8124
     }
   ]
 }

@@ -1,18 +1,18 @@
 /* ==========================================================================
-   RACHA — Landing page
-   Tokens do racha-design-system (colors/typography/layout) + estilos da página.
+   ZERINHO — Landing page
+   Tokens do zerinho-design-system (colors/typography/layout) + estilos da página.
    ========================================================================== */
 
 /* ---------- Tokens ---------- */
 :root {
   /* Brand: Volt lime */
-  --volt-100: #F2FFC9;
-  --volt-200: #E4FF97;
-  --volt-300: #D6FB63;
-  --volt-400: #C7FA3C;
-  --volt-500: #AEE81C;
-  --volt-600: #8FC70A;
-  --volt-700: #6E9A0C;
+  --volt-100: #F0FCCB;
+  --volt-200: #E0F99B;
+  --volt-300: #C9F35C;
+  --volt-400: #AEE81C;
+  --volt-500: #96CE10;
+  --volt-600: #7CAE0A;
+  --volt-700: #5F850B;
 
   /* Ink: near-black charcoals */
   --ink-950: #0C0F0A;
@@ -37,7 +37,7 @@
   --info-400: #4FB8FF;
 
   /* Times (colete) */
-  --team-volt: #C7FA3C;
+  --team-volt: #AEE81C;
   --team-blue: #4FB8FF;
   --team-orange: #FF8A3D;
   --team-pink: #FF5B9E;
@@ -49,27 +49,33 @@
   /* Aliases semânticos */
   --surface-card: var(--ink-850);
   --surface-card-hover: var(--ink-800);
+  --surface-sunk: #080A06;
   --border-subtle: var(--ink-700);
   --border-strong: var(--ink-600);
+  --divider: var(--ink-700);
   --text-primary: var(--chalk-100);
+  --text-heading: var(--chalk-000);
+  --text-secondary: var(--chalk-300);
+  --text-muted: var(--chalk-400);
   --text-on-accent: #0C1400;
   --accent: var(--volt-400);
   --accent-soft: color-mix(in oklab, var(--volt-400) 16%, transparent);
 
   /* Tipografia */
-  --font-display: 'Barlow Condensed', 'Barlow', system-ui, sans-serif;
-  --font-sans: 'Barlow', system-ui, -apple-system, sans-serif;
+  --font-display: 'Goldman', 'Chakra Petch', system-ui, sans-serif;
+  --font-sans: 'Chakra Petch', system-ui, -apple-system, sans-serif;
   --fw-semibold: 600;
   --fw-bold: 700;
-  --fw-black: 800;
-  --fs-h3: 20px;
+  --fw-black: 700;
+  --fs-h3: 18px;
   --fs-label: 14px;
   --ls-wide: 0.02em;
   --ls-caps: 0.08em;
 
   /* Raio, sombra e movimento */
-  --r-md: 14px;
-  --r-lg: 18px;
+  --r-md: 0px;
+  --r-lg: 0px;
+  --r-control: 10px;
   --r-pill: 999px;
   --shadow-accent: 0 6px 22px color-mix(in oklab, var(--volt-400) 35%, transparent);
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
