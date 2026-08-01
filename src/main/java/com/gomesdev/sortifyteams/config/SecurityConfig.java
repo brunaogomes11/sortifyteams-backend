@@ -52,6 +52,10 @@ public class SecurityConfig {
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll()
+                        // spec 002 (FR-001): checagem de versão e download do APK
+                        // acontecem antes do login — e um cliente com versão
+                        // incompatível precisa conseguir atualizar sem token.
+                        .requestMatchers("/api/app/**").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint((request, response, authException) ->
