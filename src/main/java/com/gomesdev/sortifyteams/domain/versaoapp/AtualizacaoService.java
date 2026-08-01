@@ -1,6 +1,7 @@
 package com.gomesdev.sortifyteams.domain.versaoapp;
 
 import com.gomesdev.sortifyteams.config.storage.BaseUrlResolver;
+import com.gomesdev.sortifyteams.domain.versaoapp.conteudo.PacoteConteudoService;
 import com.gomesdev.sortifyteams.domain.versaoapp.response.AtualizacaoResponse;
 import com.gomesdev.sortifyteams.domain.versaoapp.response.RuntimeDisponivelResponse;
 import com.gomesdev.sortifyteams.enums.PlataformaAppEnum;
@@ -23,11 +24,14 @@ public class AtualizacaoService {
 
     private final VersaoRuntimeRepository versaoRepository;
     private final BaseUrlResolver baseUrlResolver;
+    private final PacoteConteudoService conteudoService;
 
     public AtualizacaoService(VersaoRuntimeRepository versaoRepository,
-                              BaseUrlResolver baseUrlResolver) {
+                              BaseUrlResolver baseUrlResolver,
+                              PacoteConteudoService conteudoService) {
         this.versaoRepository = versaoRepository;
         this.baseUrlResolver = baseUrlResolver;
+        this.conteudoService = conteudoService;
     }
 
     @Transactional(readOnly = true)
@@ -45,9 +49,7 @@ public class AtualizacaoService {
             return AtualizacaoResponse.emDia();
         }
 
-        // Camada de conteúdo entra na Fase 5 (T020) — até lá, nunca há
-        // conteúdo novo a oferecer.
-        boolean conteudoNovo = false;
+        boolean conteudoNovo = conteudoService.ativoDoRuntime(runtimeVersion).isPresent();
 
         SituacaoAtualizacaoEnum situacao = classificar(versionCode, runtimeVersion,
                 publicada.getVersionCode(), publicada.getVersionCodeMinimo(),
