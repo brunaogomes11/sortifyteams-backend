@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="pt-BR" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zerinho Admin — Conteúdo (OTA)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-[#0C0F0A] text-[#EEF2E4]">
+    <header class="border-b border-[#2C3421] bg-[#12160F]">
+        <div class="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+            <h1 class="text-xl font-extrabold uppercase tracking-tight text-[#FBFDF4]">Zerinho <span class="text-[#C7FA3C]">Admin</span></h1>
+            <nav class="flex items-center gap-4 text-sm">
+                <a th:href="@{/admin/solicitacoes}" class="text-[#A9B39A] hover:text-[#C7FA3C] transition">Solicitações</a>
+                <a th:href="@{/admin/dashboard}" class="text-[#A9B39A] hover:text-[#C7FA3C] transition">Dashboard</a>
+                <a th:href="@{/admin/versoes}" class="text-[#A9B39A] hover:text-[#C7FA3C] transition">Versões</a>
+                <a th:href="@{/admin/conteudo}" class="text-[#C7FA3C] font-semibold">Conteúdo</a>
+                <form th:action="@{/admin/logout}" method="post">
+                    <button type="submit" class="text-[#A9B39A] hover:text-[#FF5B5B] transition">Sair</button>
+                </form>
+            </nav>
+        </div>
+    </header>
+
+    <main class="mx-auto max-w-5xl px-6 py-8">
+        <h2 class="text-2xl font-bold text-[#FBFDF4]">Pacotes de conteúdo (OTA)</h2>
+        <p class="mt-1 mb-6 text-sm text-[#A9B39A]">
+            Entregas que só mudam JS e imagens não precisam de APK novo. Gere com
+            <code class="rounded bg-[#0C0F0A] px-1 text-[#C7FA3C]">npx expo export --platform android</code>,
+            compacte a pasta <code class="rounded bg-[#0C0F0A] px-1 text-[#C7FA3C]">dist</code> e envie aqui.
+        </p>
+
+        <div th:if="${mensagem}" class="mb-4 rounded-lg border border-[#12A46B] bg-[#34E29B]/10 px-4 py-3 text-sm text-[#34E29B]"
+             th:text="${mensagem}"></div>
+        <div th:if="${erro}" class="mb-4 rounded-lg border border-[#D62F2F] bg-[#FF5B5B]/10 px-4 py-3 text-sm text-[#FF5B5B]"
+             th:text="${erro}"></div>
+
+        <div class="mb-6 rounded-lg border border-[#8A6D1F] bg-[#F5C542]/10 px-4 py-3 text-sm text-[#F5C542]">
+            <strong>Atenção ao runtime.</strong> O pacote só chega em apps com o mesmo
+            runtimeVersion. Publicar no runtime errado faz a entrega simplesmente não
+            aparecer para ninguém — sem erro visível.
+        </div>
+
+        <section class="mb-10 rounded-xl border border-[#2C3421] bg-[#191E15] p-6">
+            <h3 class="text-lg font-bold text-[#FBFDF4]">Publicar pacote</h3>
+            <form th:action="@{/admin/conteudo}" method="post" enctype="multipart/form-data"
+                  class="mt-4 grid gap-4 sm:grid-cols-2">
+                <label class="block">
+                    <span class="text-sm text-[#A9B39A]">runtimeVersion alvo</span>
+                    <input name="runtimeVersion" required placeholder="1"
+                           class="mt-1 w-full rounded-lg border border-[#2C3421] bg-[#0C0F0A] px-3 py-2 text-[#EEF2E4]">
+                </label>
+                <label class="block">
+                    <span class="text-sm text-[#A9B39A]">ZIP do export</span>
+                    <input name="arquivo" type="file" accept=".zip" required
+                           class="mt-1 w-full rounded-lg border border-[#2C3421] bg-[#0C0F0A] px-3 py-2 text-[#EEF2E4]">
+                </label>
+                <label class="block sm:col-span-2">
+                    <span class="text-sm text-[#A9B39A]">Notas</span>
+                    <textarea name="notas" rows="2"
+                              class="mt-1 w-full rounded-lg border border-[#2C3421] bg-[#0C0F0A] px-3 py-2 text-[#EEF2E4]"></textarea>
+                </label>
+                <div class="sm:col-span-2">
+                    <button type="submit"
+                            class="rounded-lg bg-[#C7FA3C] px-5 py-2.5 text-sm font-bold text-[#0C1400] hover:bg-[#AEE81C] transition">
+                        Publicar e ativar
+                    </button>
+                </div>
+            </form>
+        </section>
+
+        <h3 class="mb-3 text-lg font-bold text-[#FBFDF4]">Histórico</h3>
+
+        <div th:if="${#lists.isEmpty(pacotes)}"
+             class="rounded-xl border border-[#2C3421] bg-[#191E15] px-6 py-10 text-center text-[#7E886F]">
+            Nenhum pacote publicado ainda — os apps rodam o bundle embutido no APK.
+        </div>
+
+        <ul class="space-y-3">
+            <li th:each="p : ${pacotes}"
+                class="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[#2C3421] bg-[#191E15] px-5 py-4">
+                <div>
+                    <p class="font-semibold text-[#FBFDF4]">
+                        runtime <span th:text="${p.runtimeVersion}">1</span>
+                        <span th:if="${p.ativo}"
+                              class="ml-2 rounded-full bg-[#C7FA3C] px-2 py-0.5 text-xs font-bold text-[#0C1400]">ATIVO</span>
+                    </p>
+                    <p class="mt-1 text-sm text-[#A9B39A]">
+                        <span th:text="${#temporals.format(p.publicadoEm, 'dd/MM/yyyy HH:mm')}">data</span> ·
+                        <span class="text-[#7E886F]" th:text="${p.uuidManifesto}">uuid</span>
+                    </p>
+                    <p th:if="${p.notas}" class="mt-1 text-sm text-[#7E886F]" th:text="${p.notas}">notas</p>
+                </div>
+                <div class="flex gap-2">
+                    <form th:unless="${p.ativo}" th:action="@{/admin/conteudo/{id}/ativar(id=${p.id})}" method="post">
+                        <button type="submit"
+                                class="rounded-lg border border-[#C7FA3C] px-4 py-2 text-sm font-bold text-[#C7FA3C] hover:bg-[#C7FA3C]/10 transition">
+                            Voltar para este
+                        </button>
+                    </form>
+                    <form th:if="${p.ativo}" th:action="@{/admin/conteudo/{id}/despublicar(id=${p.id})}" method="post">
+                        <button type="submit"
+                                class="rounded-lg border border-[#D62F2F] px-4 py-2 text-sm font-bold text-[#FF5B5B] hover:bg-[#FF5B5B]/10 transition">
+                            Despublicar
+                        </button>
+                    </form>
+                </div>
+            </li>
+        </ul>
+    </main>
+</body>
+</html>
