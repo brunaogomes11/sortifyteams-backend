@@ -37,19 +37,99 @@
         </a>
 
         <p class="mt-5 text-xs text-[#6F7A61]">Não tem o app? Instale para entrar no racha.</p>
-        <div class="mt-3 flex gap-4 justify-center">
-            <a href="#" class="text-sm text-[#A9B39A] underline hover:text-[#EEF2E4]">Google Play</a>
-            <a href="#" class="text-sm text-[#A9B39A] underline hover:text-[#EEF2E4]">App Store</a>
+        <div class="mt-3 flex justify-center">
+            <a href="/api/app/apk" download
+               class="text-sm text-[#A9B39A] underline hover:text-[#EEF2E4]">Baixar o APK (Android)</a>
         </div>
     </div>
 
-    <script th:if="${racha.aberto}" th:inline="javascript">
-        // Tenta abrir o app assim que a página carrega: com o app instalado, o SO
-        // captura o esquema racha:// e troca pro app. Sem o app, o esquema não
-        // resolve e esta página permanece como fallback. Racha fechado não
-        // redireciona — o convidado precisa ver o aviso.
+    <!-- Modal de "app não instalado": aparece quando a tentativa de deep link
+         não tira o usuário desta página. -->
+    <div id="modal-instalar" style="display: none" aria-hidden="true"
+         class="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 sm:items-center">
+        <div class="w-full max-w-sm rounded-2xl border border-[#2C3421] bg-[#12160F] p-6 text-center">
+            <div class="text-4xl">📲</div>
+            <h3 class="mt-3 text-lg font-extrabold text-[#FBFDF4]">Você ainda não tem o app</h3>
+            <p class="mt-2 text-sm text-[#A9B39A]">
+                Baixe o APK, instale no seu Android e volte a abrir este convite para entrar no racha.
+            </p>
+
+            <a href="/api/app/apk" download id="baixar-apk"
+               class="mt-5 block w-full rounded-lg bg-[#C7FA3C] py-3 font-bold text-[#0C1400] hover:bg-[#AEE81C] transition">
+                Baixar o app (APK)
+            </a>
+            <button type="button" id="tentar-de-novo"
+                    class="mt-3 block w-full rounded-lg border border-[#2C3421] py-3 text-sm font-bold text-[#EEF2E4] hover:bg-[#1A2014] transition">
+                Já tenho o app — abrir
+            </button>
+            <button type="button" id="fechar-modal"
+                    class="mt-3 text-xs text-[#6F7A61] underline hover:text-[#A9B39A]">
+                Continuar no navegador
+            </button>
+        </div>
+    </div>
+
+    <script th:inline="javascript">
+        // Tenta abrir o app: com o app instalado, o SO captura o esquema racha://
+        // e troca pro app (a página fica em segundo plano). Sem o app, o esquema
+        // não resolve, continuamos visíveis e abrimos o modal com o download do
+        // APK. Racha fechado não tenta abrir — o convidado precisa ver o aviso.
         const deepLink = /*[[${deepLink}]]*/ 'racha://convite/';
-        window.location.href = deepLink;
+        const aberto = /*[[${racha.aberto}]]*/ true;
+        const ESPERA_MS = 1500;
+
+        const modal = document.getElementById('modal-instalar');
+        let temporizador = null;
+
+        // O display vai inline porque a classe `flex` do Tailwind venceria o
+        // `[hidden]` da folha de estilo padrão do navegador.
+        function mostrarModal() {
+            modal.style.display = 'flex';
+            modal.setAttribute('aria-hidden', 'false');
+        }
+
+        function esconderModal() {
+            modal.style.display = 'none';
+            modal.setAttribute('aria-hidden', 'true');
+        }
+
+        // O app assumiu a tela: a aba perde visibilidade/foco. Cancela o modal.
+        function appAssumiu() {
+            if (temporizador !== null) {
+                clearTimeout(temporizador);
+                temporizador = null;
+            }
+        }
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) appAssumiu();
+        });
+        window.addEventListener('pagehide', appAssumiu);
+        window.addEventListener('blur', appAssumiu);
+
+        function tentarAbrir() {
+            esconderModal();
+            appAssumiu();
+            temporizador = setTimeout(() => {
+                temporizador = null;
+                // Ainda aqui depois da espera => o esquema racha:// não foi
+                // capturado por ninguém, ou seja, o app não está instalado.
+                if (!document.hidden) mostrarModal();
+            }, ESPERA_MS);
+            window.location.href = deepLink;
+        }
+
+        // O clique é um gesto do usuário — alguns navegadores só liberam a
+        // abertura de esquemas externos assim, então o botão sempre re-tenta.
+        document.getElementById('abrir').addEventListener('click', (evento) => {
+            evento.preventDefault();
+            tentarAbrir();
+        });
+        document.getElementById('tentar-de-novo').addEventListener('click', tentarAbrir);
+        document.getElementById('fechar-modal').addEventListener('click', esconderModal);
+        document.getElementById('baixar-apk').addEventListener('click', esconderModal);
+
+        if (aberto) tentarAbrir();
     </script>
 </body>
 </html>
