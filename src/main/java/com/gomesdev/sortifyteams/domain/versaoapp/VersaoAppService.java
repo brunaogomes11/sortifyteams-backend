@@ -10,6 +10,9 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -24,6 +27,14 @@ import java.util.Optional;
  * <p>A publicação é atômica por construção: metadados e binário são gravados
  * na mesma transação (C22). Falhando no meio, nada sobra — nem versão sem
  * arquivo, nem arquivo órfão.
+ *
+ * <p><b>Metadados vêm do próprio APK</b>, não de digitação no formulário
+ * (revisão do FR-017): {@code versionCode}, {@code versionName} e o
+ * {@code runtimeVersion} do Expo já estão gravados no
+ * {@code AndroidManifest.xml} — {@link ApkManifestReader} lê de lá. Isso
+ * exige acesso aleatório ao zip (não dá para ler de um {@link InputStream}
+ * de uma passada só), então o upload é primeiro copiado para um arquivo
+ * temporário, apagado no {@code finally}.
  */
 @Service
 public class VersaoAppService {
@@ -34,13 +45,16 @@ public class VersaoAppService {
     private final VersaoRuntimeRepository versaoRepository;
     private final VersaoRuntimeArquivoRepository arquivoRepository;
     private final ApkBinarioRepository binarioRepository;
+    private final ApkManifestReader manifestReader;
 
     public VersaoAppService(VersaoRuntimeRepository versaoRepository,
                             VersaoRuntimeArquivoRepository arquivoRepository,
-                            ApkBinarioRepository binarioRepository) {
+                            ApkBinarioRepository binarioRepository,
+                            ApkManifestReader manifestReader) {
         this.versaoRepository = versaoRepository;
         this.arquivoRepository = arquivoRepository;
         this.binarioRepository = binarioRepository;
+        this.manifestReader = manifestReader;
     }
 
     @Transactional(readOnly = true)
@@ -65,8 +79,8 @@ public class VersaoAppService {
     }
 
     /**
-     * Publica uma versão e a torna ativa. Validações da FR-017 acontecem
-     * antes de qualquer escrita.
+     * Publica uma versão lendo versão/versionCode/runtimeVersion do próprio
+     * APK. Caminho normal — usado pelo painel (T003).
      */
     @Transactional
     public VersaoRuntime publicar(PublicarVersaoRequest request, MultipartFile arquivo,
@@ -77,28 +91,64 @@ public class VersaoAppService {
     @Transactional
     public VersaoRuntime publicar(PublicarVersaoRequest request, FonteApk arquivo,
                                   PlataformaAppEnum plataforma, String publicadaPorId) {
-        validarArquivo(arquivo);
-        validarMetadados(request, plataforma);
+        Path temp = copiarParaTemp(arquivo);
+        try {
+            validarZip(temp);
+            ApkManifest manifest = manifestReader.ler(temp);
+            return publicarValidado(temp, manifest.versionCode(), manifest.versionName(),
+                    manifest.runtimeVersion(), request.versionCodeMinimo(), request.notas(),
+                    plataforma, publicadaPorId);
+        } finally {
+            apagarTemp(temp);
+        }
+    }
 
-        Hashes hashes = calcularHashes(arquivo);
+    /**
+     * Publica com metadados informados explicitamente, sem ler o manifesto.
+     *
+     * <p><b>Uso restrito ao bootstrap (C15/T006).</b> O APK 1.0.0 distribuído
+     * antes desta feature não tem o plugin {@code expo-updates} configurado —
+     * não existe {@code runtimeVersion} para extrair dele, porque o conceito
+     * não existia quando ele foi buildado. Qualquer publicação nova (painel)
+     * usa {@link #publicar(PublicarVersaoRequest, FonteApk, PlataformaAppEnum, String)}.
+     */
+    @Transactional
+    public VersaoRuntime publicarComMetadadosExplicitos(FonteApk arquivo, String versao, int versionCode,
+                                                        String runtimeVersion, int versionCodeMinimo,
+                                                        String notas, PlataformaAppEnum plataforma,
+                                                        String publicadaPorId) {
+        Path temp = copiarParaTemp(arquivo);
+        try {
+            validarZip(temp);
+            return publicarValidado(temp, versionCode, versao, runtimeVersion, versionCodeMinimo, notas,
+                    plataforma, publicadaPorId);
+        } finally {
+            apagarTemp(temp);
+        }
+    }
 
-        VersaoRuntime versao = new VersaoRuntime(plataforma, request.versao().trim(),
-                request.versionCode(), request.runtimeVersion().trim(),
-                request.notas(), request.versionCodeMinimo(), publicadaPorId);
-        versao.setTamanhoBytes(hashes.tamanho());
-        versao.setSha256(hashes.sha256());
-        versao.setMd5(hashes.md5());
+    private VersaoRuntime publicarValidado(Path temp, int versionCode, String versao, String runtimeVersion,
+                                           int versionCodeMinimo, String notas,
+                                           PlataformaAppEnum plataforma, String publicadaPorId) {
+        validarMetadados(versionCode, versionCodeMinimo, plataforma);
+        Hashes hashes = calcularHashes(temp);
+
+        VersaoRuntime versaoRuntime = new VersaoRuntime(plataforma, versao, versionCode,
+                runtimeVersion, notas, versionCodeMinimo, publicadaPorId);
+        versaoRuntime.setTamanhoBytes(hashes.tamanho());
+        versaoRuntime.setSha256(hashes.sha256());
+        versaoRuntime.setMd5(hashes.md5());
 
         versaoRepository.desativarTodas(plataforma);
-        versao.setAtiva(true);
-        versaoRepository.save(versao);
+        versaoRuntime.setAtiva(true);
+        versaoRepository.save(versaoRuntime);
         versaoRepository.flush();
 
-        arquivoRepository.save(new VersaoRuntimeArquivo(versao.getId()));
+        arquivoRepository.save(new VersaoRuntimeArquivo(versaoRuntime.getId()));
         arquivoRepository.flush();
-        binarioRepository.gravar(versao.getId(), abrir(arquivo), hashes.tamanho());
+        binarioRepository.gravar(versaoRuntime.getId(), abrirTemp(temp), hashes.tamanho());
 
-        return versao;
+        return versaoRuntime;
     }
 
     /**
@@ -131,16 +181,9 @@ public class VersaoAppService {
 
     // ---------- validações (FR-017) ----------
 
-    private void validarArquivo(FonteApk arquivo) {
-        if (arquivo == null || arquivo.vazio()) {
-            throw new IllegalArgumentException("Envie o arquivo APK.");
-        }
-        String nome = arquivo.nome();
-        if (nome == null || !nome.toLowerCase().endsWith(".apk")) {
-            throw new IllegalArgumentException("O arquivo precisa ser um APK (.apk).");
-        }
+    private void validarZip(Path temp) {
         byte[] cabecalho = new byte[MAGIC_ZIP.length];
-        try (InputStream in = arquivo.abrir()) {
+        try (InputStream in = Files.newInputStream(temp)) {
             int lidos = in.readNBytes(cabecalho, 0, cabecalho.length);
             if (lidos < MAGIC_ZIP.length || !java.util.Arrays.equals(cabecalho, MAGIC_ZIP)) {
                 throw new IllegalArgumentException(
@@ -151,36 +194,58 @@ public class VersaoAppService {
         }
     }
 
-    private void validarMetadados(PublicarVersaoRequest request, PlataformaAppEnum plataforma) {
-        if (request.versionCodeMinimo() > request.versionCode()) {
+    private void validarMetadados(int versionCode, int versionCodeMinimo, PlataformaAppEnum plataforma) {
+        if (versionCodeMinimo > versionCode) {
             throw new IllegalArgumentException(
-                    "O versionCode mínimo suportado (%d) não pode ser maior que o da própria versão (%d)."
-                            .formatted(request.versionCodeMinimo(), request.versionCode()));
+                    "O versionCode mínimo suportado (%d) não pode ser maior que o do próprio APK (%d)."
+                            .formatted(versionCodeMinimo, versionCode));
         }
         versaoRepository.maiorVersionCode(plataforma).ifPresent(maior -> {
-            if (request.versionCode() <= maior) {
+            if (versionCode <= maior) {
                 throw new IllegalArgumentException(
-                        ("versionCode %d é menor ou igual ao já publicado (%d). O Android recusa instalar "
-                                + "por cima de uma versão igual ou mais nova.")
-                                .formatted(request.versionCode(), maior));
+                        ("O versionCode deste APK (%d) é menor ou igual ao já publicado (%d). O Android recusa "
+                                + "instalar por cima de uma versão igual ou mais nova — gere um novo build "
+                                + "com versionCode maior.")
+                                .formatted(versionCode, maior));
             }
         });
     }
 
-    // ---------- hashes (D4) ----------
+    // ---------- arquivo temporário e hashes (D4) ----------
 
-    /**
-     * Duas passadas pelo arquivo: aqui só os digests e o tamanho; a gravação lê
-     * de novo. O multipart do Spring escreve o upload em disco, então reabrir o
-     * stream é barato — e o código fica sem o acoplamento de calcular hash
-     * enquanto o driver consome o mesmo stream.
-     */
-    private Hashes calcularHashes(FonteApk arquivo) {
+    private Path copiarParaTemp(FonteApk arquivo) {
+        if (arquivo == null || arquivo.vazio()) {
+            throw new IllegalArgumentException("Envie o arquivo APK.");
+        }
+        String nome = arquivo.nome();
+        if (nome == null || !nome.toLowerCase().endsWith(".apk")) {
+            throw new IllegalArgumentException("O arquivo precisa ser um APK (.apk).");
+        }
+        try {
+            Path temp = Files.createTempFile("versao-app-", ".apk");
+            try (InputStream in = arquivo.abrir()) {
+                Files.copy(in, temp, StandardCopyOption.REPLACE_EXISTING);
+            }
+            return temp;
+        } catch (IOException e) {
+            throw new UncheckedIOException("Falha ao ler o arquivo enviado.", e);
+        }
+    }
+
+    private void apagarTemp(Path temp) {
+        try {
+            Files.deleteIfExists(temp);
+        } catch (IOException ignored) {
+            // arquivo temporario do SO — nao impede a publicacao ja concluida
+        }
+    }
+
+    private Hashes calcularHashes(Path temp) {
         try {
             MessageDigest sha256 = MessageDigest.getInstance("SHA-256");
             MessageDigest md5 = MessageDigest.getInstance("MD5");
             long tamanho = 0;
-            try (InputStream base = arquivo.abrir();
+            try (InputStream base = Files.newInputStream(temp);
                  DigestInputStream comSha = new DigestInputStream(base, sha256);
                  DigestInputStream in = new DigestInputStream(comSha, md5)) {
                 byte[] buffer = new byte[8192];
@@ -198,9 +263,9 @@ public class VersaoAppService {
         }
     }
 
-    private InputStream abrir(FonteApk arquivo) {
+    private InputStream abrirTemp(Path temp) {
         try {
-            return arquivo.abrir();
+            return Files.newInputStream(temp);
         } catch (IOException e) {
             throw new UncheckedIOException("Falha ao ler o arquivo enviado.", e);
         }

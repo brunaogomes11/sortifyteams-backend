@@ -73,6 +73,15 @@
 			<version>5.2.3</version>
 		</dependency>
 
+		<!-- Leitura do AndroidManifest.xml binario do APK publicado (spec 002):
+		     versionCode/versionName/runtimeVersion vem do proprio arquivo, sem
+		     digitacao manual no painel. -->
+		<dependency>
+			<groupId>net.dongliu</groupId>
+			<artifactId>apk-parser</artifactId>
+			<version>2.6.10</version>
+		</dependency>
+
 		<!-- JJWT -->
 		<dependency>
 			<groupId>io.jsonwebtoken</groupId>

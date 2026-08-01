@@ -1,7 +1,6 @@
 package com.gomesdev.sortifyteams.domain.versaoapp;
 
 import com.gomesdev.sortifyteams.IntegrationTestBase;
-import com.gomesdev.sortifyteams.domain.versaoapp.request.PublicarVersaoRequest;
 import com.gomesdev.sortifyteams.enums.PlataformaAppEnum;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -75,10 +74,13 @@ class ApkDownloadFlowTest extends IntegrationTestBase {
         for (int i = 4; i < TAMANHO; i++) {
             conteudo[i] = (byte) (i % 251); // padrão não repetitivo por byte
         }
-        versao = service.publicar(new PublicarVersaoRequest("1.1.0", 2, "1", 1, "teste"),
-                new MockMultipartFile("arquivo", "zerinho.apk",
-                        "application/vnd.android.package-archive", conteudo),
-                PlataformaAppEnum.ANDROID, null);
+        // Este teste é sobre servir bytes (Range/ETag/concorrência), não sobre
+        // ler manifesto — publicarComMetadadosExplicitos evita precisar de um
+        // APK com AndroidManifest.xml de verdade (ver ApkManifestReaderTest).
+        versao = service.publicarComMetadadosExplicitos(
+                FonteApk.de(new MockMultipartFile("arquivo", "zerinho.apk",
+                        "application/vnd.android.package-archive", conteudo)),
+                "1.1.0", 2, "1", 1, "teste", PlataformaAppEnum.ANDROID, null);
     }
 
     /** Executa a requisição e resolve o {@code StreamingResponseBody} assíncrono. */

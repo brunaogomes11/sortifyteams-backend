@@ -47,22 +47,21 @@ public class VersaoAdminController {
     }
 
     @PostMapping
-    public String publicar(@RequestParam String versao,
-                           @RequestParam Integer versionCode,
-                           @RequestParam String runtimeVersion,
-                           @RequestParam Integer versionCodeMinimo,
+    public String publicar(@RequestParam Integer versionCodeMinimo,
                            @RequestParam(required = false) String notas,
                            @RequestParam MultipartFile arquivo,
                            @AuthenticationPrincipal Usuario admin,
                            RedirectAttributes redirect) {
         try {
-            var request = new PublicarVersaoRequest(versao, versionCode, runtimeVersion,
-                    versionCodeMinimo, notas);
+            // versao/versionCode/runtimeVersion vem do AndroidManifest.xml do
+            // proprio arquivo (ApkManifestReader) — nao sao digitados aqui.
+            var request = new PublicarVersaoRequest(versionCodeMinimo, notas);
             VersaoRuntime publicada = service.publicar(request, arquivo, PlataformaAppEnum.ANDROID,
                     admin != null ? admin.getId() : null);
             redirect.addFlashAttribute("mensagem",
-                    "Versão %s (versionCode %d) publicada e ativa."
-                            .formatted(publicada.getVersao(), publicada.getVersionCode()));
+                    "Versão %s (versionCode %d, runtime %s) lida do APK, publicada e ativa."
+                            .formatted(publicada.getVersao(), publicada.getVersionCode(),
+                                    publicada.getRuntimeVersion()));
         } catch (IllegalArgumentException e) {
             redirect.addFlashAttribute("erro", e.getMessage());
         }

@@ -17,6 +17,8 @@ import org.springframework.mock.web.MockMultipartFile;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -31,12 +33,20 @@ import static org.mockito.Mockito.when;
 /**
  * Validações de publicação (spec 002, FR-017) — regra crítica, testes na
  * mesma tarefa da implementação (Constituição IV).
+ *
+ * <p>{@link ApkManifestReader} é mockado aqui de propósito: estes testes
+ * cobrem orquestração e validação (versionCode/mínimo/zip), não a extração
+ * real do manifesto — essa parte tem teste próprio em
+ * {@link ApkManifestReaderTest}. Os "APKs" usados abaixo são só o cabeçalho
+ * zip; um APK de verdade com {@code AndroidManifest.xml} não é necessário
+ * quando o leitor está mockado.
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class VersaoAppServiceTest {
 
     private static final byte[] CABECALHO_ZIP = {0x50, 0x4B, 0x03, 0x04};
+    private static final ApkManifest MANIFESTO_PADRAO = new ApkManifest(2, "1.1.0", "1");
 
     @Mock
     private VersaoRuntimeRepository versaoRepository;
@@ -44,6 +54,8 @@ class VersaoAppServiceTest {
     private VersaoRuntimeArquivoRepository arquivoRepository;
     @Mock
     private ApkBinarioRepository binarioRepository;
+    @Mock
+    private ApkManifestReader manifestReader;
 
     @InjectMocks
     private VersaoAppService service;
@@ -51,6 +63,7 @@ class VersaoAppServiceTest {
     @BeforeEach
     void semVersaoPublicada() {
         when(versaoRepository.maiorVersionCode(any())).thenReturn(Optional.empty());
+        when(manifestReader.ler(any())).thenReturn(MANIFESTO_PADRAO);
         // O dublê precisa simular @PrePersist: é ele que atribui o ULID, e o
         // serviço usa o id logo em seguida para gravar o binário. Sem isto o
         // mock devolveria a entidade sem id — infiel ao que o JPA faz.
@@ -76,18 +89,20 @@ class VersaoAppServiceTest {
         return apk("zerinho-1.1.0.apk", conteudo);
     }
 
-    private PublicarVersaoRequest pedido(int versionCode, int minimo) {
-        return new PublicarVersaoRequest("1.1.0", versionCode, "1", minimo, "notas");
+    private PublicarVersaoRequest pedido(int minimo) {
+        return new PublicarVersaoRequest(minimo, "notas");
     }
 
     @Test
-    @DisplayName("publica versão válida, ativa a nova e desativa as anteriores")
+    @DisplayName("publica versão válida (versionCode/versao/runtime do manifesto), ativa e desativa as anteriores")
     void publicaVersaoValida() {
-        VersaoRuntime publicada = service.publicar(pedido(2, 1), apkValido(),
+        VersaoRuntime publicada = service.publicar(pedido(1), apkValido(),
                 PlataformaAppEnum.ANDROID, "admin-id");
 
         assertThat(publicada.isAtiva()).isTrue();
         assertThat(publicada.getVersionCode()).isEqualTo(2);
+        assertThat(publicada.getVersao()).isEqualTo("1.1.0");
+        assertThat(publicada.getRuntimeVersion()).isEqualTo("1");
         assertThat(publicada.getTamanhoBytes()).isEqualTo(64);
         assertThat(publicada.getSha256()).hasSize(64);
         assertThat(publicada.getMd5()).hasSize(32);
@@ -96,11 +111,11 @@ class VersaoAppServiceTest {
     }
 
     @Test
-    @DisplayName("recusa versionCode igual ao já publicado (C3)")
+    @DisplayName("recusa versionCode do manifesto igual ao já publicado (C3)")
     void recusaVersionCodeIgual() {
-        when(versaoRepository.maiorVersionCode(any())).thenReturn(Optional.of(2));
+        when(versaoRepository.maiorVersionCode(any())).thenReturn(Optional.of(2)); // = MANIFESTO_PADRAO.versionCode()
 
-        assertThatThrownBy(() -> service.publicar(pedido(2, 1), apkValido(),
+        assertThatThrownBy(() -> service.publicar(pedido(1), apkValido(),
                 PlataformaAppEnum.ANDROID, "admin-id"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("menor ou igual");
@@ -109,11 +124,11 @@ class VersaoAppServiceTest {
     }
 
     @Test
-    @DisplayName("recusa versionCode menor que o já publicado (C3)")
+    @DisplayName("recusa versionCode do manifesto menor que o já publicado (C3)")
     void recusaVersionCodeMenor() {
         when(versaoRepository.maiorVersionCode(any())).thenReturn(Optional.of(5));
 
-        assertThatThrownBy(() -> service.publicar(pedido(4, 1), apkValido(),
+        assertThatThrownBy(() -> service.publicar(pedido(1), apkValido(),
                 PlataformaAppEnum.ANDROID, "admin-id"))
                 .isInstanceOf(IllegalArgumentException.class);
 
@@ -121,60 +136,65 @@ class VersaoAppServiceTest {
     }
 
     @Test
-    @DisplayName("aceita versionCode imediatamente acima do publicado")
+    @DisplayName("aceita versionCode do manifesto imediatamente acima do publicado")
     void aceitaVersionCodeAcima() {
+        when(manifestReader.ler(any())).thenReturn(new ApkManifest(3, "1.2.0", "1"));
         when(versaoRepository.maiorVersionCode(any())).thenReturn(Optional.of(2));
 
-        VersaoRuntime publicada = service.publicar(pedido(3, 1), apkValido(),
+        VersaoRuntime publicada = service.publicar(pedido(1), apkValido(),
                 PlataformaAppEnum.ANDROID, "admin-id");
 
         assertThat(publicada.getVersionCode()).isEqualTo(3);
     }
 
     @Test
-    @DisplayName("recusa mínimo suportado maior que a própria versão")
+    @DisplayName("recusa mínimo suportado maior que o versionCode do manifesto")
     void recusaMinimoIncoerente() {
-        assertThatThrownBy(() -> service.publicar(pedido(3, 4), apkValido(),
+        assertThatThrownBy(() -> service.publicar(pedido(4), apkValido(), // manifesto = versionCode 2
                 PlataformaAppEnum.ANDROID, "admin-id"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("mínimo suportado");
     }
 
     @Test
-    @DisplayName("aceita mínimo suportado igual à própria versão (limite)")
+    @DisplayName("aceita mínimo suportado igual ao versionCode do manifesto (limite)")
     void aceitaMinimoIgual() {
-        VersaoRuntime publicada = service.publicar(pedido(3, 3), apkValido(),
+        VersaoRuntime publicada = service.publicar(pedido(2), apkValido(),
                 PlataformaAppEnum.ANDROID, "admin-id");
 
-        assertThat(publicada.getVersionCodeMinimo()).isEqualTo(3);
+        assertThat(publicada.getVersionCodeMinimo()).isEqualTo(2);
     }
 
     @Test
-    @DisplayName("recusa arquivo que não termina em .apk")
+    @DisplayName("recusa arquivo que não termina em .apk (antes de ler o manifesto)")
     void recusaExtensaoErrada() {
         byte[] conteudo = new byte[8];
         System.arraycopy(CABECALHO_ZIP, 0, conteudo, 0, CABECALHO_ZIP.length);
 
-        assertThatThrownBy(() -> service.publicar(pedido(2, 1), apk("app.zip", conteudo),
+        assertThatThrownBy(() -> service.publicar(pedido(1), apk("app.zip", conteudo),
                 PlataformaAppEnum.ANDROID, "admin-id"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("(.apk)");
+
+        verify(manifestReader, never()).ler(any());
     }
 
     @Test
-    @DisplayName("recusa arquivo com nome de APK mas conteúdo que não é zip")
+    @DisplayName("recusa arquivo com nome de APK mas conteúdo que não é zip (antes de ler o manifesto)")
     void recusaConteudoNaoZip() {
-        assertThatThrownBy(() -> service.publicar(pedido(2, 1),
+        assertThatThrownBy(() -> service.publicar(pedido(1),
                 apk("falso.apk", "isto nao e um apk".getBytes()),
                 PlataformaAppEnum.ANDROID, "admin-id"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("assinatura de conteúdo");
+
+        verify(manifestReader, never()).ler(any());
     }
 
     @Test
     @DisplayName("recusa arquivo vazio")
     void recusaArquivoVazio() {
-        assertThatThrownBy(() -> service.publicar(pedido(2, 1), apk("vazio.apk", new byte[0]),
+        assertThatThrownBy(() -> service.publicar(pedido(1), apk("vazio.apk", new byte[0]),
                 PlataformaAppEnum.ANDROID, "admin-id"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Envie o arquivo");
@@ -183,7 +203,7 @@ class VersaoAppServiceTest {
     @Test
     @DisplayName("nenhuma escrita acontece quando a validação falha")
     void naoEscreveNadaEmValidacaoQueFalha() {
-        assertThatThrownBy(() -> service.publicar(pedido(2, 9), apkValido(),
+        assertThatThrownBy(() -> service.publicar(pedido(9), apkValido(), // minimo(9) > manifesto(2)
                 PlataformaAppEnum.ANDROID, "admin-id"))
                 .isInstanceOf(IllegalArgumentException.class);
 
@@ -201,7 +221,7 @@ class VersaoAppServiceTest {
             conteudo[i] = (byte) (i % 251);
         }
 
-        VersaoRuntime publicada = service.publicar(pedido(2, 1), apk("zerinho.apk", conteudo),
+        VersaoRuntime publicada = service.publicar(pedido(1), apk("zerinho.apk", conteudo),
                 PlataformaAppEnum.ANDROID, "admin-id");
 
         assertThat(publicada.getTamanhoBytes()).isEqualTo(conteudo.length);
@@ -209,12 +229,12 @@ class VersaoAppServiceTest {
     }
 
     @Test
-    @DisplayName("o stream entregue ao repositório contém o arquivo inteiro")
+    @DisplayName("o stream entregue ao repositório contém o arquivo inteiro (o round-trip pelo temp não corrompe)")
     void streamGravadoContemArquivoInteiro() throws IOException {
         byte[] conteudo = new byte[512];
         System.arraycopy(CABECALHO_ZIP, 0, conteudo, 0, CABECALHO_ZIP.length);
 
-        service.publicar(pedido(2, 1), apk("zerinho.apk", conteudo),
+        service.publicar(pedido(1), apk("zerinho.apk", conteudo),
                 PlataformaAppEnum.ANDROID, "admin-id");
 
         ArgumentCaptor<InputStream> captor = ArgumentCaptor.forClass(InputStream.class);
@@ -223,6 +243,17 @@ class VersaoAppServiceTest {
         ByteArrayOutputStream lido = new ByteArrayOutputStream();
         captor.getValue().transferTo(lido);
         assertThat(lido.toByteArray()).isEqualTo(conteudo);
+    }
+
+    @Test
+    @DisplayName("o arquivo temporário usado para ler o manifesto é apagado depois da publicação")
+    void apagaArquivoTemporarioAoFinal() {
+        ArgumentCaptor<Path> captor = ArgumentCaptor.forClass(Path.class);
+
+        service.publicar(pedido(1), apkValido(), PlataformaAppEnum.ANDROID, "admin-id");
+
+        verify(manifestReader).ler(captor.capture());
+        assertThat(Files.exists(captor.getValue())).isFalse();
     }
 
     @Test

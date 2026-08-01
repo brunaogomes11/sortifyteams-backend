@@ -1,6 +1,5 @@
 package com.gomesdev.sortifyteams.domain.versaoapp;
 
-import com.gomesdev.sortifyteams.domain.versaoapp.request.PublicarVersaoRequest;
 import com.gomesdev.sortifyteams.enums.PlataformaAppEnum;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,6 +22,12 @@ import org.springframework.stereotype.Component;
  * {@code classpath:} quanto {@code file:} — o padrão aponta para o arquivo
  * legado dentro do JAR, que sai do repositório assim que este import rodar em
  * produção (C24).
+ *
+ * <p>Usa {@link VersaoAppService#publicarComMetadadosExplicitos} em vez do
+ * caminho normal de publicação: este APK antecede o {@code expo-updates}, não
+ * tem {@code runtimeVersion} embutido no manifesto para o
+ * {@link ApkManifestReader} extrair — os valores vêm de configuração porque,
+ * neste caso específico, não têm de onde mais vir.
  */
 @Component
 public class ApkInicialImporter implements ApplicationRunner {
@@ -65,10 +70,10 @@ public class ApkInicialImporter implements ApplicationRunner {
             return;
         }
         try {
-            var request = new PublicarVersaoRequest(versao, versionCode, runtimeVersion, 1,
-                    "Versão importada da distribuição anterior à central de atualizações.");
-            VersaoRuntime importada = service.publicar(request,
+            VersaoRuntime importada = service.publicarComMetadadosExplicitos(
                     FonteApk.de(recurso, "zerinho-%s.apk".formatted(versao)),
+                    versao, versionCode, runtimeVersion, 1,
+                    "Versão importada da distribuição anterior à central de atualizações.",
                     PlataformaAppEnum.ANDROID, null);
             log.info("APK inicial importado: versão {} (versionCode {}), {} bytes.",
                     importada.getVersao(), importada.getVersionCode(), importada.getTamanhoBytes());

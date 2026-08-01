@@ -35,39 +35,28 @@
 
         <section class="mb-10 rounded-xl border border-[#2C3421] bg-[#191E15] p-6">
             <h3 class="text-lg font-bold text-[#FBFDF4]">Publicar nova versão</h3>
+            <p class="mt-1 mb-4 text-xs text-[#7E886F]">
+                Versão, versionCode e runtimeVersion são lidos direto do
+                <code class="rounded bg-[#0C0F0A] px-1 text-[#C7FA3C]">AndroidManifest.xml</code>
+                do APK enviado — não precisa digitar de novo o que o build já contém.
+            </p>
             <form th:action="@{/admin/versoes}" method="post" enctype="multipart/form-data"
                   class="mt-4 grid gap-4 sm:grid-cols-2">
-                <label class="block">
-                    <span class="text-sm text-[#A9B39A]">Versão (semver)</span>
-                    <input name="versao" required placeholder="1.1.0"
-                           class="mt-1 w-full rounded-lg border border-[#2C3421] bg-[#0C0F0A] px-3 py-2 text-[#EEF2E4]">
-                </label>
-                <label class="block">
-                    <span class="text-sm text-[#A9B39A]">versionCode</span>
-                    <input name="versionCode" type="number" min="1" required placeholder="2"
-                           class="mt-1 w-full rounded-lg border border-[#2C3421] bg-[#0C0F0A] px-3 py-2 text-[#EEF2E4]">
-                </label>
-                <label class="block">
-                    <span class="text-sm text-[#A9B39A]">runtimeVersion</span>
-                    <input name="runtimeVersion" required placeholder="1"
-                           class="mt-1 w-full rounded-lg border border-[#2C3421] bg-[#0C0F0A] px-3 py-2 text-[#EEF2E4]">
-                    <span class="mt-1 block text-xs text-[#7E886F]">Só muda quando entra biblioteca nativa.</span>
-                </label>
                 <label class="block">
                     <span class="text-sm text-[#A9B39A]">versionCode mínimo suportado</span>
                     <input name="versionCodeMinimo" type="number" min="1" required placeholder="1"
                            class="mt-1 w-full rounded-lg border border-[#2C3421] bg-[#0C0F0A] px-3 py-2 text-[#EEF2E4]">
                     <span class="mt-1 block text-xs text-[#7E886F]">Abaixo disto a atualização vira obrigatória.</span>
                 </label>
+                <label class="block">
+                    <span class="text-sm text-[#A9B39A]">Arquivo APK</span>
+                    <input name="arquivo" type="file" accept=".apk" required
+                           class="mt-1 w-full rounded-lg border border-[#2C3421] bg-[#0C0F0A] px-3 py-2 text-[#EEF2E4]">
+                </label>
                 <label class="block sm:col-span-2">
                     <span class="text-sm text-[#A9B39A]">Notas da versão</span>
                     <textarea name="notas" rows="3" placeholder="O que mudou nesta versão"
                               class="mt-1 w-full rounded-lg border border-[#2C3421] bg-[#0C0F0A] px-3 py-2 text-[#EEF2E4]"></textarea>
-                </label>
-                <label class="block sm:col-span-2">
-                    <span class="text-sm text-[#A9B39A]">Arquivo APK</span>
-                    <input name="arquivo" type="file" accept=".apk" required
-                           class="mt-1 w-full rounded-lg border border-[#2C3421] bg-[#0C0F0A] px-3 py-2 text-[#EEF2E4]">
                 </label>
                 <div class="sm:col-span-2">
                     <button type="submit"
