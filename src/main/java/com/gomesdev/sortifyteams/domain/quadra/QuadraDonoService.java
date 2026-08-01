@@ -2,6 +2,7 @@ package com.gomesdev.sortifyteams.domain.quadra;
 
 import com.gomesdev.sortifyteams.config.geo.GeocodingService;
 import com.gomesdev.sortifyteams.config.storage.StorageService;
+import com.gomesdev.sortifyteams.config.storage.UploadImagem;
 import com.gomesdev.sortifyteams.domain.quadra.request.HorarioRequest;
 import com.gomesdev.sortifyteams.domain.quadra.request.HorariosRequest;
 import com.gomesdev.sortifyteams.domain.quadra.request.QuadraRequest;
@@ -122,10 +123,7 @@ public class QuadraDonoService {
     @Transactional
     public QuadraResponse adicionarFoto(String quadraId, MultipartFile arquivo, Usuario dono) {
         Quadra quadra = buscarDoDono(quadraId, dono);
-        String contentType = arquivo.getContentType();
-        if (contentType == null || !contentType.startsWith("image/")) {
-            throw new IllegalArgumentException("Envie um arquivo de imagem.");
-        }
+        UploadImagem.validar(arquivo);
         try {
             String key = storageService.store(arquivo, "quadras/" + quadraId);
             int ordem = fotoRepository.findByQuadraIdOrderByOrdem(quadraId).size();

@@ -1,6 +1,7 @@
 package com.gomesdev.sortifyteams.domain.usuario;
 
 import com.gomesdev.sortifyteams.config.storage.StorageService;
+import com.gomesdev.sortifyteams.config.storage.UploadImagem;
 import com.gomesdev.sortifyteams.domain.esporte.Esporte;
 import com.gomesdev.sortifyteams.domain.esporte.EsporteRepository;
 import com.gomesdev.sortifyteams.domain.racha.RachaRepository;
@@ -73,10 +74,7 @@ public class PerfilService {
     @Transactional
     public PerfilResponse atualizarFoto(MultipartFile arquivo, Usuario principal) {
         Usuario usuario = buscar(principal.getId());
-        String contentType = arquivo.getContentType();
-        if (contentType == null || !contentType.startsWith("image/")) {
-            throw new IllegalArgumentException("Envie um arquivo de imagem.");
-        }
+        UploadImagem.validar(arquivo);
         try {
             String anterior = usuario.getFotoPerfil();
             String key = storageService.store(arquivo, "perfis/" + usuario.getId());
